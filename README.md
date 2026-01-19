@@ -1,5 +1,5 @@
 
-# nanoGPT
+# nanoGPT Advanced
 
 ![nanoGPT](assets/nanogpt.jpg)
 
