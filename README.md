@@ -211,6 +211,117 @@ For simple model benchmarking and profiling, `bench.py` might be useful. It's id
 
 Note that the code by default uses [PyTorch 2.0](https://pytorch.org/get-started/pytorch-2.0/). At the time of writing (Dec 29, 2022) this makes `torch.compile()` available in the nightly release. The improvement from the one line of code is noticeable, e.g. cutting down iteration time from ~250ms / iter to 135ms / iter. Nice work PyTorch team!
 
+---
+
+## Geodesic-Delta Model (E-Delta-MHC-Geo)
+
+This repository includes an experimental **Geodesic-Delta architecture** (`proposed_model.py`) that extends the standard GPT with:
+
+- **GeodesicDelta layers** — Unitary rotations on the residual stream gated by thermodynamic entropy
+- **mHC Mixing Matrices** — Identity-initialized linear transforms for covariant updates
+- **Thermodynamic Gating** — Adaptive damping via purity proxy (β parameter)
+
+### Architecture Changes vs Baseline
+
+| Component | Baseline (`model.py`) | Geodesic (`proposed_model.py`) |
+|-----------|----------------------|-------------------------------|
+| Residual Connection | `x = x + attn(ln(x))` | `x = rotate(x) + damper * mix(attn(ln(rotate(x))))` |
+| Extra Parameters/Block | 0 | ~2.36M (for n_embd=768) |
+| Pretrained Loading | ✅ Supported | ❌ Train from scratch only |
+
+### Quick Start: Run Experiments
+
+#### 1. Prepare Datasets
+
+```bash
+# Grokking (modular arithmetic)
+python data/grokking/prepare.py
+
+# Erasure ("Did I Stutter?" task)
+python data/erasure/prepare.py
+
+# Isometry (Pass-Key / Needle-in-Haystack)
+python data/isometry/prepare.py
+```
+
+#### 2. Run Geodesic-Delta vs Baseline
+
+**Grokking Task:**
+```bash
+# Geodesic-Delta
+python train_geodesic.py config/train_grok.py
+
+# Baseline
+python train.py config/train_grok_baseline.py
+```
+
+**Erasure Task:**
+```bash
+# Geodesic-Delta
+python train_geodesic.py config/train_erasure_geodesic.py
+
+# Baseline
+python train.py config/train_erasure_baseline.py
+```
+
+**Isometry Task:**
+```bash
+# Geodesic-Delta
+python train_geodesic.py config/train_isometry_geodesic.py
+
+# Baseline
+python train.py config/train_isometry_baseline.py
+```
+
+### Hyperparameter Reference
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| `n_streams` | 4 | Number of streams for Geodesic rotation |
+| `init_bias` | -6.0 | Initial β bias (ensures identity at start) |
+| `generator_init` | 0.01 | u, v initialization scale |
+| `w_alpha` | 0.0 | Entropy weight (learned) |
+| `damper` | 1 - tanh(β) | Thermodynamic gating function |
+| `weight_decay` | 0.1 | Prevents rotation drift |
+| `grad_clip` | 1.0 | Stabilizes β spikes |
+
+### Experimental Results
+
+See [RESULTS.md](RESULTS.md) for detailed analysis of all experiments.
+
+**Summary (4-layer, 128-dim models, single GPU):**
+
+| Task | Metric | Geodesic | Baseline | Notes |
+|------|--------|----------|----------|-------|
+| Grokking | Final Val Loss | 1.597 | **1.585** | Similar performance |
+| Erasure | Final Val Loss | **0.186** | 0.186 | Virtually identical |
+| Isometry | Final Val Loss | **4.444** | 4.443 | Virtually identical |
+
+Early experiments show comparable performance between architectures on small-scale tasks. The Geodesic-Delta benefits may emerge with:
+- Larger models (more layers where representation drift accumulates)
+- Longer sequences (stress isometry properties)
+- Extended training (late-stage grokking phenomena)
+
+### Recommended Next Experiments
+
+Pre-configured experiments designed to reveal potential Geodesic advantages:
+
+| Experiment | Geodesic Config | Baseline Config | Goal |
+|------------|-----------------|-----------------|------|
+| **Extended Grokking** | `train_grok_extended.py` | `train_grok_extended_baseline.py` | Observe late generalization (15k iters) |
+| **Scaled-Up Model** | `train_grok_large.py` | `train_grok_large_baseline.py` | Test depth benefits (12 layers, 512 dim) |
+| **Long-Context Isometry** | `train_isometry_long.py` | `train_isometry_long_baseline.py` | Test information preservation (2048 context) |
+
+```bash
+# Example: Run extended grokking comparison
+python train_geodesic.py config/train_grok_extended.py
+python train.py config/train_grok_extended_baseline.py
+```
+
+See [RESULTS.md](RESULTS.md) for detailed experiment designs and what to look for.
+
+---
+
 ## todos
 
 - Investigate and add FSDP instead of DDP
@@ -221,6 +332,7 @@ Note that the code by default uses [PyTorch 2.0](https://pytorch.org/get-started
 - Separate out the optim buffers from model params in checkpoints I think
 - Additional logging around network health (e.g. gradient clip events, magnitudes)
 - Few more investigations around better init etc.
+- Scale up Geodesic-Delta experiments (larger models, longer sequences)
 
 ## troubleshooting
 
