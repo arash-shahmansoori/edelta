@@ -338,6 +338,81 @@ See [RESULTS.md](RESULTS.md) for detailed experiment designs and what to look fo
 
 Note that by default this repo uses PyTorch 2.0 (i.e. `torch.compile`). This is fairly new and experimental, and not yet available on all platforms (e.g. Windows). If you're running into related error messages try to disable this by adding `--compile=False` flag. This will slow down the code but at least it will run.
 
+### GPU Utilization Issues
+
+**Symptoms:**
+- GPU at 100% utilization
+- Training appears stuck or slow
+- Multiple Python processes running
+
+**Root Causes:**
+
+| Cause | Description |
+|-------|-------------|
+| Stale background processes | Previous training runs still active |
+| torch.compile workers | Each training spawns 32 compile workers |
+| Parallel experiments | Launched with `&` but never stopped |
+| OOM / Stuck process | GPU memory full, process hung |
+
+**Quick Cleanup Commands:**
+
+```bash
+# Check GPU status
+nvidia-smi
+
+# Check running processes
+ps aux | grep python | grep -v grep
+
+# Kill all training processes
+pkill -f "train.*\.py"
+
+# Kill torch.compile workers
+pkill -f "compile_worker"
+
+# Full cleanup (kill all training + workers)
+pkill -f "train.*\.py" && pkill -f "compile_worker" && sleep 2 && nvidia-smi
+
+# Nuclear option - kill ALL Python (be careful!)
+pkill -9 python
+```
+
+**Prevention Tips:**
+
+1. **Run experiments sequentially** (not with `&`):
+   ```bash
+   python train.py config1.py && python train.py config2.py
+   ```
+
+2. **Disable torch.compile** for faster startup (avoids 32 compile workers):
+   ```python
+   # In config file
+   compile = False
+   ```
+
+3. **Check before starting new experiments:**
+   ```bash
+   ps aux | grep python | grep -v grep
+   ```
+
+4. **Use consistent gradient_accumulation_steps** across all training scripts for fair comparisons:
+   ```python
+   # In config file
+   gradient_accumulation_steps = 1  # Fast iterations
+   # or
+   gradient_accumulation_steps = 40  # More tokens per step
+   ```
+
+### Training Speed Reference
+
+With `gradient_accumulation_steps = 1`, `batch_size = 64`, `block_size = 128`:
+
+| Model | Time/iter | Tokens/sec |
+|-------|-----------|------------|
+| Baseline | ~5 ms | ~1.6M |
+| mHC-only | ~6 ms | ~1.3M |
+| Geodesic | ~12 ms | ~680K |
+| Geodesic (Taylor) | ~11 ms | ~750K |
+
 For some context on this repository, GPT, and language modeling it might be helpful to watch my [Zero To Hero series](https://karpathy.ai/zero-to-hero.html). Specifically, the [GPT video](https://www.youtube.com/watch?v=kCc8FmEb1nY) is popular if you have some prior language modeling context.
 
 For more questions/discussions feel free to stop by **#nanoGPT** on Discord:
