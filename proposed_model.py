@@ -17,7 +17,7 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 # Global flag to enable/disable beta diagnostics
-ENABLE_BETA_LOGGING = True
+ENABLE_BETA_LOGGING = False  # Disabled for performance (torch.compile issues)
 BETA_LOG_PROB = 0.01  # Log 1% of forward passes (per instruction)
 
 
