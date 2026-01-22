@@ -62,6 +62,10 @@ backend = 'nccl' # 'nccl', 'gloo', etc.
 device = 'cuda' # examples: 'cpu', 'cuda', 'cuda:0', 'cuda:1' etc., or try 'mps' on macbooks
 dtype = 'bfloat16' if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else 'float16' # 'float32', 'bfloat16', or 'float16', the latter will auto implement a GradScaler
 compile = True # use PyTorch 2.0 to compile the model to be faster
+# Geodesic-specific settings
+use_damper = True # If False, removes 1-tanh(beta) damping
+use_static_gate = False # If True, uses learnable scalar instead of purity proxy
+geo_lr_mult = 50.0 # Learning rate multiplier for geodesic params
 # -----------------------------------------------------------------------------
 config_keys = [k for k,v in globals().items() if not k.startswith('_') and isinstance(v, (int, float, bool, str))]
 exec(open('configurator.py').read()) # overrides from command line or config file
@@ -135,7 +139,9 @@ if os.path.exists(meta_path):
 
 # model init
 model_args = dict(n_layer=n_layer, n_head=n_head, n_embd=n_embd, block_size=block_size,
-                  bias=bias, vocab_size=None, dropout=dropout) # start with model_args from command line
+                  bias=bias, vocab_size=None, dropout=dropout,
+                  use_damper=use_damper, use_static_gate=use_static_gate,
+                  geo_lr_mult=geo_lr_mult) # includes Geodesic ablation settings
 if init_from == 'scratch':
     # init a new model from scratch
     print("Initializing a new Geodesic-Delta model from scratch")
@@ -180,8 +186,8 @@ model.to(device)
 # initialize a GradScaler. If enabled=False scaler is a no-op
 scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
 
-# optimizer
-optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
+# optimizer - with differential LR for geodesic params
+optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type, geo_lr_mult=geo_lr_mult)
 if init_from == 'resume':
     optimizer.load_state_dict(checkpoint['optimizer'])
 checkpoint = None # free up memory
