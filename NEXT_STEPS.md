@@ -253,11 +253,128 @@ x = x + attn_out  # Clean residual path
 ```
 Pure DDL (Householder):  0.0016  ← 🏆 DRAMATIC WINNER (136x better!)
 Pure mHC (Sinkhorn):     0.2138
+E∆-DDL-Style:            0.2155  ← DDL-style application didn't help!
 Baseline:                0.2177
-E∆-MHC-Geo:              0.2243  ← Underperformed
+E∆-MHC-Geo:              0.2243  ← Original proposed model
 ```
-**Analysis**: DDL's Householder reflection can rapidly "flip" representations, perfect for corrections.
-Cayley rotation (in E∆-MHC-Geo) is more gradual, less suited for sharp pivots.
+
+---
+
+## 🔬 Deep Diagnostic Investigation (January 2026)
+
+### Phase 1: Why Did E∆-MHC-Geo Underperform?
+
+**Hypothesis**: The thermodynamic gate (β) was "sleeping" - not activating rotation.
+
+**Checkpoint Analysis** (E∆-MHC-Geo on Correction Task):
+```
+Layer 0 Attn: ||A||_F = 0.000054, β = 0.011, damper = 0.989  ← DEAD
+Layer 1 Attn: ||A||_F = 0.000140, β = 0.033, damper = 0.967  ← DEAD
+Layer 2 Attn: ||A||_F = 0.003084, β = 0.023, damper = 0.977  ← DEAD
+Layer 3 Attn: ||A||_F = 0.037575, β = 0.016, damper = 0.984  ← DEAD
+```
+
+**Finding**: The model learned to DISABLE rotation entirely by:
+1. Zeroing rotation generators (u, v → 0)
+2. Keeping β small (damper ≈ 1, suppressing geometric transform)
+
+### Phase 2: The "Bypass" Problem
+
+The original E∆-MHC-Geo architecture allowed the model to bypass rotation:
+
+```
+Original E∆: x = x_rotated + (1 - tanh(β)) * F(x)
+             └── damper ≈ 1 when β ≈ 0
+             └── Model takes easy path: disable rotation entirely
+```
+
+**Root Cause**: The damper term `(1 - tanh(β))` let the model avoid learning rotation.
+
+### Phase 3: Solution Attempt - DDL-Style Application (Option C)
+
+**Hypothesis**: If we apply rotation in DDL-style (transform FIRST, no damper), the model MUST use rotation.
+
+**Implementation**: `proposed_model_ddl_style.py`
+- β controls rotation MAGNITUDE (not damper)
+- No bypass possible - rotation always applies
+- Standard residual on rotated input
+
+**Result**: ❌ **FAILED**
+```
+E∆-DDL-Style val loss: 0.2155  ← Same as baseline!
+Pure DDL val loss:     0.0016  ← 135x better
+```
+
+**Checkpoint Analysis** (E∆-DDL-Style):
+```
+Layer 0: ||A|| = 0.016, scaled_rotation = 0.016  ← Still nearly zero!
+Layer 1: ||A|| = 0.008, scaled_rotation = 0.007
+Layer 2: ||A|| = 0.002, scaled_rotation = 0.002
+Layer 3: ||A|| = 0.034, scaled_rotation = 0.033
+```
+
+Even WITHOUT bypass, the model learns near-zero rotation!
+
+### Phase 4: The Mathematical Insight
+
+**The problem is NOT the application pattern - it's the OPERATOR ITSELF!**
+
+| Property | Householder (DDL) | Cayley (E∆) |
+|----------|-------------------|-------------|
+| Type | **Reflection** | **Rotation** |
+| Eigenvalues | +1 (n-1 times), **-1** (once) | All on unit circle |
+| Determinant | -1 (flips orientation) | +1 (preserves orientation) |
+| Can NEGATE info? | ✅ YES | ❌ NO |
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  FUNDAMENTAL MATHEMATICAL LIMITATION                         │
+│                                                             │
+│  Correction task requires: "Actually, no" → NEGATE info     │
+│                                                             │
+│  Householder:  x → x - 2(x·k)k  → Can set x_k to -x_k      │
+│                Eigenvalue -1 along k direction              │
+│                                                             │
+│  Cayley:       x → Q·x where Q ∈ SO(n)                     │
+│                All eigenvalues on unit circle (e^{iθ})      │
+│                CANNOT produce eigenvalue -1                 │
+│                                                             │
+│  CONCLUSION: No matter how we apply Cayley rotation,        │
+│  it mathematically CANNOT do what Householder does!         │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Phase 5: Decision - True Hybrid Architecture
+
+**Insight**: Different tasks need different operators:
+- **Geometric tasks** (rotation2d, rotation3d): Need ROTATION (preserves info)
+- **Correction tasks** ("Aha!" moments): Need REFLECTION (can negate)
+
+**Solution**: Implement a TRUE HYBRID with both operators:
+
+```python
+class GeodesicDeltaHybrid:
+    """
+    Combines:
+    - Cayley ROTATION (for geometric tasks)
+    - Householder REFLECTION (for corrections)
+    - Learnable gate to select which to use
+    """
+    def forward(self, x):
+        x_rotated = cayley_transform(x)    # Preserves info
+        x_reflected = householder_reflect(x)  # Can negate
+        
+        gate = sigmoid(self.gate_proj(x))  # Learn when to flip
+        return gate * x_rotated + (1 - gate) * x_reflected
+```
+
+**Expected Benefits**:
+- ✅ Geometric tasks → Model selects rotation (preserves info, isometric)
+- ✅ Correction tasks → Model selects reflection (can negate rapidly)
+- ✅ Best of both DDL paper AND E∆ theory
+- ✅ Thermodynamic gating still provides interpretability
+
+---
 
 ### How to Run
 
