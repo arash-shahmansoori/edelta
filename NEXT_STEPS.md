@@ -142,47 +142,58 @@ Implemented in `proposed_model_fast.py`:
 
 ## Prioritized Next Steps (Ranked by Importance)
 
+*Core approach: Cayley-based Geodesic rotation (E-Delta). Papers used for insights, not replacement.*
+
 ### 🔴 Priority 1: Create Optimized Geodesic-Only Model
-**Why**: Ablation proved Geodesic-only is best. Current codebase has mHC embedded.
+**Why**: Ablation proved Geodesic-only (Cayley rotation) is best — mHC mixing hurts.
 
 **Action**: Create `proposed_model_pure.py` with:
-- Geodesic rotation (Taylor-optimized)
+- Cayley rotation (Taylor-optimized for speed)
 - NO mHC mixing matrices
-- Minimal parameter overhead
+- Clean, minimal architecture
 
-**Expected Impact**: Best of both worlds - regularization + efficiency
+**Expected Impact**: Best regularization + efficiency
 
-### 🔴 Priority 2: 3D Rotation Task
-**Why**: If 2D rotation shows 1% benefit, 3D may show stronger effect.
+### 🔴 Priority 2: Multi-Seed Validation
+**Why**: Confirm rotation benefit is robust, not statistical noise (per Illusion of Insight insight).
+
+**Action**: Re-run Rotation2D ablation with 3-5 random seeds:
+- Geodesic-only vs Baseline
+- Report mean ± std of final val loss
+
+**Expected Impact**: Scientific rigor for publication
+
+### 🔴 Priority 3: 3D Rotation Task
+**Why**: If 2D rotation shows benefit, 3D may show stronger effect with richer geometry.
 
 **Action**: Create `data/rotation3d/prepare.py` with:
-- 3D point cloud rotation prediction
-- More complex geometric structure
-- Test if benefits scale with dimensionality
+- 3D point cloud rotation prediction (SO(3) structure)
+- More complex geometric reasoning
+- Test if Cayley rotation benefits scale with dimensionality
 
 **Expected Impact**: Validate geometric inductive bias at scale
 
-### 🟡 Priority 3: Value-Path Rotation (Option B)
-**Why**: Alternative architecture that keeps residual stream clean.
+### 🟡 Priority 4: Value-Path Rotation
+**Why**: Apply Cayley rotation to attention values only, keeping residual stream clean.
 
 ```python
 # Rotate V in attention only
-v_rotated = rotate(V)
+v_rotated = cayley_rotate(V)
 attn_out = softmax(QK^T) @ v_rotated
-x = x + attn_out  # Clean residual
+x = x + attn_out  # Clean residual path
 ```
 
 **Expected Impact**: May improve gradient flow while keeping rotation benefits
 
-### 🟡 Priority 4: Per-Head Rotation (Option E)  
-**Why**: More expressive - different rotations for different attention patterns.
+### 🟡 Priority 5: Per-Head Rotation
+**Why**: More expressive — different Cayley rotations per attention head.
 
 **Action**: Instead of global rotation, learn per-head rotation matrices.
 
 **Expected Impact**: Task-adaptive geometric transformations
 
-### 🟢 Priority 5: Scaling Tests
-**Why**: Need to validate on larger models before production use.
+### 🟢 Priority 6: Scaling Tests
+**Why**: Validate on larger models before production use.
 
 **Action**: Test Geodesic-only on:
 - 12-layer, 512-dim models
@@ -191,12 +202,13 @@ x = x + attn_out  # Clean residual
 
 **Expected Impact**: Production readiness validation
 
-### 🟢 Priority 6: Theoretical Analysis
-**Why**: Understand WHY rotation helps (nice-to-have, not urgent).
+### 🟢 Priority 7: Theoretical Analysis
+**Why**: Understand WHY Cayley rotation provides regularization.
 
 **Questions**:
 - What loss landscape properties make rotation beneficial?
 - Can we predict when geometric bias will help?
+- How does purity proxy (Φ) relate to model uncertainty?
 
 ---
 
@@ -304,9 +316,37 @@ mHC-only:       0.5844  ← WORST (mixing alone is harmful)
 
 ---
 
+## Literature Analysis (Insights for E-Delta Research)
+
+*These papers inform our research but do NOT replace our Cayley-based approach.*
+
+### Deep Delta Learning (arXiv:2601.00417v1)
+**Relationship to E-Delta**: DDL uses rank-1 Householder reflections; we use full Cayley rotation.
+
+| DDL Feature | E-Delta Feature | Key Difference |
+|-------------|-----------------|----------------|
+| Rank-1 `kk^T` operator | Full Cayley `(I+A/2)^(-1)(I-A/2)` | E-Delta is richer (full SO(n)) |
+| Reflection (can erase info) | Rotation (preserves all info) | **E-Delta is isometric** |
+| Single reflection plane | Continuous rotation manifold | **E-Delta explores geometry** |
+
+**Insight for E-Delta**: DDL validates that geometric operations on residual streams can provide regularization. Our Cayley approach is **more expressive** (full rotation vs single reflection) and **information-preserving** (isometry).
+
+### Illusion of Insight (arXiv:2601.00514v1)
+**Key Insight**: Many apparent "Aha!" moments are superficial pattern matching, not genuine reasoning.
+
+| Finding | Implication for E-Delta |
+|---------|------------------------|
+| False positives common | Use **multiple seeds** to validate rotation benefit |
+| Uncertainty correlates with genuine shifts | Our purity proxy (Φ) may capture similar signal |
+| Training stage affects reasoning | Gate (β) behavior may be phase-dependent |
+
+**Insight for E-Delta**: Validates importance of rigorous experimental methodology. Our ablation showing Geodesic-only wins should be confirmed with multi-seed experiments.
+
+---
+
 ## References
 
 - Original paper: "The Geodesic Manifold-Delta Transformer" (Shahmansoori, 2026)
-- Deep Delta Learning: arXiv:2601.00417v1
+- Deep Delta Learning: [arXiv:2601.00417v1](https://arxiv.org/abs/2601.00417)
+- Illusion of Insight: [arXiv:2601.00514v1](https://arxiv.org/abs/2601.00514)
 - DeepSeek mHC: arXiv:2512.24880v1
-- Illusion of Insight: arXiv:2601.00514v1
