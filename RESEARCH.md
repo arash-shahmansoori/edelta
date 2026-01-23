@@ -314,6 +314,44 @@ Our empirical investigation followed a systematic path:
 
 4. **Hybrid solution** — Adding Householder reflection with learnable gate achieved 4.3× improvement
 
+### 4.5 Entropy-Aware Gating Experiment (V2)
+
+We investigated whether making the gate **entropy-aware** would improve performance:
+
+$$\gamma = \sigma(\mathbf{W}_g \cdot \bar{\mathbf{x}} + w_\Phi \cdot \Phi + b_g)$$
+
+**Hypothesis:** High uncertainty (large $\Phi$) might correlate with need for different operators.
+
+**Result:** Entropy-aware gating **hurt performance**:
+
+| Model | Best Val Loss | Entropy in Gate |
+|-------|---------------|-----------------|
+| **E∆-Hybrid V1** | **0.0508** | ❌ No |
+| E∆-Hybrid V2 | 0.0822 | ✅ Yes |
+
+**Analysis of Learned $w_\Phi$ Parameters:**
+- Early layers: $w_\Phi > 0$ (high entropy → prefer rotation)
+- Later layers: $w_\Phi < 0$ (high entropy → prefer reflection)
+
+**Why Entropy-Aware Gating Failed:**
+
+The key insight is that **entropy and correction are orthogonal signals**:
+
+| Signal | Measures | When High |
+|--------|----------|-----------|
+| Entropy ($\Phi$) | "I don't know" | Model is uncertain |
+| Correction Need | "I was wrong" | Error detected in input |
+
+For the correction task:
+- Corrections are triggered by **content** ("Actually, no"), not uncertainty
+- When confident-but-wrong, entropy is LOW but correction is needed
+- Adding entropy to the gate **conflates these distinct signals**
+
+**Conclusion:** The gate should remain **content-based** (V1 design):
+- Gate: $\gamma = \sigma(\mathbf{W}_g \cdot \mathbf{x} + b_g)$ — learns from input content
+- Rotation $\beta$: entropy-driven — uncertain → explore
+- Reflection $\beta$: static learned — always ready to correct
+
 ---
 
 ## 5. Architecture Details
