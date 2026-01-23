@@ -1,0 +1,8 @@
+Dataset: correction
+Date: 2026-01-23 13:59:52.870679
+Max iters: 10000
+
+Baseline Transformer: None
+E∆-MHC-Geo (Proposed): None
+Pure mHC (Sinkhorn): None
+Pure DDL (Householder): None

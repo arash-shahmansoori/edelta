@@ -63,12 +63,13 @@ def run_model(model_key, dataset, max_iters, compile_model=False):
     print(f"{'='*60}")
     
     # Build command with unified config
+    # Note: booleans must be True/False (capitalized) for literal_eval
     cmd = [
         sys.executable, model['script'],
         f"--dataset={dataset}",
         f"--out_dir={out_dir}",
         f"--max_iters={max_iters}",
-        f"--compile={'true' if compile_model else 'false'}",
+        f"--compile={'True' if compile_model else 'False'}",
         f"--eval_interval={UNIFIED_CONFIG['eval_interval']}",
         f"--log_interval={UNIFIED_CONFIG['log_interval']}",
         f"--n_layer={UNIFIED_CONFIG['n_layer']}",

@@ -241,13 +241,23 @@ x = x + attn_out  # Clean residual path
 
 ### Goal: Prove E∆-MHC-Geo Achieves ALL Paper Claims
 
-| Experiment | Dataset | What It Tests | Expected Winner |
-|------------|---------|---------------|-----------------|
-| **Energy Conservation** | deep_signal | mHC claim: signal preserved across depth | mHC ≈ E∆ > DDL |
-| **Geometric Expressivity** | rotation3d | DDL claim: SO(3) geometric transforms | E∆ > DDL > mHC |
-| **Aha! Moments** | correction | Insight: β spikes at corrections | E∆ (has gating) |
-| **Strategy Shifts** | strategy_shift | Insight: genuine reasoning pivots | E∆ (entropy-based) |
-| **β-Entropy Correlation** | entropy_probe | Insight: β correlates with uncertainty | E∆ (designed for this) |
+| Experiment | Dataset | What It Tests | Expected Winner | **ACTUAL RESULT** |
+|------------|---------|---------------|-----------------|-------------------|
+| **Energy Conservation** | deep_signal | mHC claim: signal preserved across depth | mHC ≈ E∆ > DDL | *Pending* |
+| **Geometric Expressivity** | rotation3d | DDL claim: SO(3) geometric transforms | E∆ > DDL > mHC | *Pending* |
+| **Aha! Moments** | correction | Insight: β spikes at corrections | E∆ (has gating) | **🏆 DDL wins (136x better!)** |
+| **Strategy Shifts** | strategy_shift | Insight: genuine reasoning pivots | E∆ (entropy-based) | *Pending* |
+| **β-Entropy Correlation** | entropy_probe | Insight: β correlates with uncertainty | E∆ (designed for this) | *Pending* |
+
+### 🔥 Correction Task Results (Actual)
+```
+Pure DDL (Householder):  0.0016  ← 🏆 DRAMATIC WINNER (136x better!)
+Pure mHC (Sinkhorn):     0.2138
+Baseline:                0.2177
+E∆-MHC-Geo:              0.2243  ← Underperformed
+```
+**Analysis**: DDL's Householder reflection can rapidly "flip" representations, perfect for corrections.
+Cayley rotation (in E∆-MHC-Geo) is more gradual, less suited for sharp pivots.
 
 ### How to Run
 

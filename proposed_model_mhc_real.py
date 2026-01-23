@@ -229,14 +229,14 @@ class Block(nn.Module):
         
         # --- ATTENTION BLOCK ---
         # Reshape to streams
-        x_streams = x.view(B, S, self.n_streams, self.d_stream)
+        x_streams = x.reshape(B, S, self.n_streams, self.d_stream)
         
         # Apply mHC residual mixing
         x_mixed = self.mhc_attn(x_streams)
         
         # Aggregate for attention input
         x_agg = self.mhc_attn.aggregate(x_mixed)  # (B, S, D) effectively
-        x_flat = x_agg.view(B, S, -1)
+        x_flat = x_agg.reshape(B, S, -1)
         
         # Pad if needed (aggregate might reduce dimension)
         if x_flat.shape[-1] < D:
@@ -247,12 +247,12 @@ class Block(nn.Module):
         attn_out = self.attn(x_norm)
         
         # Residual with mixed streams
-        x = x_mixed.view(B, S, D) + attn_out
+        x = x_mixed.reshape(B, S, D) + attn_out
         
         # --- MLP BLOCK ---
-        x_streams = x.view(B, S, self.n_streams, self.d_stream)
+        x_streams = x.reshape(B, S, self.n_streams, self.d_stream)
         x_mixed = self.mhc_mlp(x_streams)
-        x_flat = x_mixed.view(B, S, D)
+        x_flat = x_mixed.reshape(B, S, D)
         
         x_norm = self.ln_2(x_flat)
         mlp_out = self.mlp(x_norm)

@@ -1,0 +1,5 @@
+Dataset: correction
+Date: 2026-01-23 14:04:19.601939
+Max iters: 100
+
+Baseline Transformer: 5.5448
