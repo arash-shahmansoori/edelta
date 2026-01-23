@@ -1,0 +1,5 @@
+Correction Task Dataset (Aha! Moments)
+Train samples: 50000
+Val samples: 5000
+Purpose: Test if β spikes at correction tokens
+Correction phrases: ['Wait, I meant', 'Actually, no,', 'Scratch that,', 'On second thought,', 'However, instead', 'No wait,', 'Sorry, I meant', 'Correction:', 'Let me rephrase:', 'Ignore that,']

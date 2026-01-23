@@ -1,0 +1,4 @@
+3D Rotation Prediction Dataset
+Train samples: 50000
+Val samples: 5000
+Purpose: Test SO(3) geometric reasoning

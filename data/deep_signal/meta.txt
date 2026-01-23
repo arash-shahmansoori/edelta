@@ -1,0 +1,6 @@
+Deep Signal Preservation Dataset
+Train samples: 50000
+Val samples: 5000
+Signal range: (0, 99)
+Noise length range: (20, 100)
+Purpose: Test signal energy conservation across depth

@@ -1,45 +1,60 @@
 # Geodesic-Delta Research: Next Steps & Future Directions
 
-**Last Updated:** January 22, 2026
-**Status:** ✅ **Geodesic-only is BEST! mHC mixing hurts!**
+**Last Updated:** January 23, 2026
+**Status:** 🔬 **Comprehensive Validation Framework Ready!**
 
 ---
 
 ## Executive Summary
 
-After comprehensive investigation and component ablation:
-1. ✅ **Geodesic rotation HELPS** on geometric tasks (Rotation2D)
-2. ❌ **mHC mixing HURTS** performance (adds params, worse results)
-3. 🏆 **Geodesic-only is BEST** (rotation without mHC mixing)
-4. ✅ Speed optimized with Taylor approximation (7% faster)
+The E∆-MHC-Geo architecture is designed to unify:
+1. ✅ **mHC** (DeepSeek) - Multi-stream width + signal conservation
+2. ✅ **DDL** (Deep Delta Learning) - Geometric expressivity + dynamic gating
+3. ✅ **Illusion of Insight** - Thermodynamic gating based on entropy
 
-**Key Insight**: Pure rotation provides regularization. The mHC mixing matrices add unnecessary complexity and should be **removed** from the architecture.
+We now have a complete experimental framework to validate ALL claims:
+- 4 models: Baseline, Pure mHC, Pure DDL, E∆-MHC-Geo
+- 5 new datasets: Deep Signal, Rotation3D, Correction, Strategy Shift, Entropy Probe
+- Analysis tools for β tracking and entropy correlation
 
 ---
 
 ## What We Built
 
-### Models
-| File | Description |
-|------|-------------|
-| `proposed_model.py` | Full Geodesic-Delta + mHC |
-| `proposed_model_fast.py` | **Optimized** Geodesic with Taylor approximation (7% faster) |
-| `proposed_model_v2.py` | V2 with normalized generators (prevents collapse) |
-| `proposed_model_mhc.py` | mHC mixing only (no rotation) |
-| `model.py` | Baseline Transformer |
+### Models for Comparative Experiments
+| File | Description | Tests |
+|------|-------------|-------|
+| `proposed_model.py` | **E∆-MHC-Geo (Full)** - Your proposed unified method | All claims |
+| `proposed_model_mhc_real.py` | Pure mHC with Sinkhorn-Knopp | mHC claims |
+| `proposed_model_ddl.py` | Pure DDL with Householder operator | DDL claims |
+| `model.py` | Baseline Transformer | Control |
+| `proposed_model_fast.py` | Optimized E∆ with Taylor approximation | Speed |
+| `proposed_model_geo_only.py` | Cayley rotation only (ablation) | Ablation |
 
-### Tasks
-| Task | Dataset | Purpose |
-|------|---------|---------|
-| Grokking | `data/grokking/` | Modular arithmetic |
-| Erasure | `data/erasure/` | Negation/correction |
-| Isometry | `data/isometry/` | Pass-key retrieval |
-| Reversibility | `data/reversibility/` | Path/rotation cancellation |
-| **Rotation2D** | `data/rotation2d/` | TRUE geometric task |
+### Datasets for Claim Validation
+| Dataset | Purpose | Tests Claim From |
+|---------|---------|------------------|
+| `data/deep_signal/` | Signal energy conservation across depth | mHC |
+| `data/rotation3d/` | 3D geometric reasoning (SO(3)) | DDL |
+| `data/correction/` | "Aha!" moment detection | Illusion of Insight |
+| `data/strategy_shift/` | Math reasoning pivots | Illusion of Insight |
+| `data/entropy_probe/` | β-entropy correlation | Illusion of Insight |
+| `data/rotation2d/` | 2D geometric reasoning | DDL |
 
-### Diagnostic Tools
-- `analyze_geodesic.py` - Checkpoint analysis for rotation generators
-- Beta logging in `proposed_model.py` (disabled by default)
+### Diagnostic & Analysis Tools
+| Tool | Purpose |
+|------|---------|
+| `analyze_geodesic.py` | Checkpoint analysis for rotation generators |
+| `analyze_beta_tracking.py` | Track β values at correction tokens |
+| `run_comparative_experiments.py` | Run all model-dataset comparisons |
+
+### Training Scripts
+| Script | Model |
+|--------|-------|
+| `train.py` | Baseline |
+| `train_geodesic.py` | E∆-MHC-Geo |
+| `train_mhc_real.py` | Pure mHC |
+| `train_ddl.py` | Pure DDL |
 
 ---
 
@@ -219,6 +234,47 @@ x = x + attn_out  # Clean residual path
 **Answer**: **NO** - mHC-only performs WORST (0.5844 vs 0.5369 baseline)
 
 **Conclusion**: mHC mixing matrices should be **removed** from the architecture.
+
+---
+
+## 🆕 Comprehensive Validation Experiment Matrix
+
+### Goal: Prove E∆-MHC-Geo Achieves ALL Paper Claims
+
+| Experiment | Dataset | What It Tests | Expected Winner |
+|------------|---------|---------------|-----------------|
+| **Energy Conservation** | deep_signal | mHC claim: signal preserved across depth | mHC ≈ E∆ > DDL |
+| **Geometric Expressivity** | rotation3d | DDL claim: SO(3) geometric transforms | E∆ > DDL > mHC |
+| **Aha! Moments** | correction | Insight: β spikes at corrections | E∆ (has gating) |
+| **Strategy Shifts** | strategy_shift | Insight: genuine reasoning pivots | E∆ (entropy-based) |
+| **β-Entropy Correlation** | entropy_probe | Insight: β correlates with uncertainty | E∆ (designed for this) |
+
+### How to Run
+
+```bash
+# Prepare all datasets
+python run_comparative_experiments.py --prepare-only
+
+# Run single experiment
+python train_geodesic.py --dataset=correction --max_iters=5000
+
+# Run full comparison
+python run_comparative_experiments.py --all --max_iters=5000
+
+# Analyze β tracking (after training)
+python analyze_beta_tracking.py --checkpoint=out-edelta-correction/ckpt.pt
+```
+
+### Expected Results Matrix
+
+```
+                    mHC Claims    DDL Claims    Insight Claims
+                    (energy)      (geometry)    (β-entropy)
+Pure mHC:              ✅            ❌              ❌
+Pure DDL:              ❌            ✅              ❌
+E∆-MHC-Geo:            ✅            ✅              ✅  ← Your method!
+Baseline:              ❌            ❌              ❌
+```
 
 ---
 

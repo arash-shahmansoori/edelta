@@ -1,0 +1,5 @@
+Entropy Probe Dataset
+Train samples: 40000
+Val samples: 4000
+Purpose: Test β-entropy correlation
+Labels: [HIGH] for uncertain, [LOW] for certain

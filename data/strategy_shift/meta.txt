@@ -1,0 +1,4 @@
+Strategy Shift Dataset (Math Reasoning)
+Train samples: 30000
+Val samples: 3000
+Purpose: Test genuine reasoning pivots
