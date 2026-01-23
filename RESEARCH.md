@@ -322,12 +322,13 @@ $$\gamma = \sigma(\mathbf{W}_g \cdot \bar{\mathbf{x}} + w_\Phi \cdot \Phi + b_g)
 
 **Hypothesis:** High uncertainty (large $\Phi$) might correlate with need for different operators.
 
-**Result:** Entropy-aware gating **hurt performance**:
+**Result:** Entropy-awareness **hurt performance** in all configurations:
 
-| Model | Best Val Loss | Entropy in Gate |
-|-------|---------------|-----------------|
-| **E∆-Hybrid V1** | **0.0508** | ❌ No |
-| E∆-Hybrid V2 | 0.0822 | ✅ Yes |
+| Model | Best Val Loss | Entropy Gate | Entropy Reflection |
+|-------|---------------|--------------|-------------------|
+| **E∆-Hybrid V1** | **0.0508** | ❌ No | ❌ No |
+| E∆-Hybrid V2a | 0.0822 | ✅ Yes | ❌ No |
+| E∆-Hybrid V2b | 0.0831 | ❌ No | ✅ Yes |
 
 **Analysis of Learned $w_\Phi$ Parameters:**
 - Early layers: $w_\Phi > 0$ (high entropy → prefer rotation)
