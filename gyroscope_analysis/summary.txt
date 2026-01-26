@@ -5,8 +5,8 @@ CONTINUOUS GYROSCOPE EXPERIMENT SUMMARY
 Configuration:
 - Vector dimension: 16
 - Test angle: 30.0°
-- Steps: 200
-- Trials: 10
+- Steps: 100
+- Trials: 5
 
 KEY FINDINGS:
 

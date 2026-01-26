@@ -101,6 +101,10 @@ else:
 tokens_per_iter = gradient_accumulation_steps * ddp_world_size * batch_size * block_size
 print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
+# Update output directory to include dataset name for consistency
+if out_dir == 'out':
+    out_dir = f'out-baseline-{dataset}'
+
 if master_process:
     os.makedirs(out_dir, exist_ok=True)
 torch.manual_seed(1337 + seed_offset)

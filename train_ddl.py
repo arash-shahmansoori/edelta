@@ -61,6 +61,10 @@ exec(open('configurator.py').read())
 config = {k: globals()[k] for k in config_keys}
 # -----------------------------------------------------------------------------
 
+# Update output directory to include dataset
+out_dir = f'out-ddl-{dataset}'
+os.makedirs(out_dir, exist_ok=True)
+
 torch.manual_seed(1337)
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True
@@ -135,7 +139,6 @@ def get_lr(it):
     return min_lr + coeff * (learning_rate - min_lr)
 
 # training loop
-os.makedirs(out_dir, exist_ok=True)
 X, Y = get_batch('train')
 t0 = time.time()
 iter_num = 0

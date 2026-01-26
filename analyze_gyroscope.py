@@ -375,6 +375,181 @@ def print_angle_table(results: dict):
     print("="*80)
 
 
+def compute_phase_error(x_pred: np.ndarray, x_true: np.ndarray) -> float:
+    """
+    Compute angular phase error between predicted and true vectors.
+    
+    This measures how well the model tracks the DIRECTION of rotation,
+    not just the norm. Cayley should excel here since it's a true rotation.
+    
+    Args:
+        x_pred: Predicted vector (N, dim) or (dim,)
+        x_true: True vector (N, dim) or (dim,)
+        
+    Returns:
+        Mean phase error in radians
+    """
+    # Use first two dimensions for angle computation
+    pred_angle = np.arctan2(x_pred[..., 1], x_pred[..., 0])
+    true_angle = np.arctan2(x_true[..., 1], x_true[..., 0])
+    
+    # Angular difference (handle wraparound properly)
+    diff = pred_angle - true_angle
+    phase_error = np.abs(np.arctan2(np.sin(diff), np.cos(diff)))
+    
+    return np.mean(phase_error)
+
+
+def count_direction_flips(trajectory: np.ndarray) -> int:
+    """
+    Count how many times rotation direction reverses in a trajectory.
+    
+    Cayley (true rotation) should have 0 flips.
+    Householder (reflection) may introduce direction flips.
+    
+    Args:
+        trajectory: Sequence of vectors (T, dim)
+        
+    Returns:
+        Number of direction reversals
+    """
+    flips = 0
+    prev_sign = None
+    
+    for t in range(len(trajectory) - 1):
+        # Cross product in 2D (using first two dimensions)
+        cross = trajectory[t, 0] * trajectory[t+1, 1] - trajectory[t, 1] * trajectory[t+1, 0]
+        sign = np.sign(cross)
+        
+        if prev_sign is not None and sign != prev_sign and sign != 0:
+            flips += 1
+        if sign != 0:
+            prev_sign = sign
+            
+    return flips
+
+
+def analyze_rotation_quality(dim: int = 16,
+                              theta_degrees: float = 45.0,
+                              num_steps: int = 100) -> dict:
+    """
+    Analyze rotation quality metrics for each method.
+    
+    This is the KEY experiment that shows Cayley's advantage over Householder:
+    - Both preserve norm
+    - But Cayley tracks rotation angle correctly
+    - Householder may introduce phase errors and direction flips
+    """
+    theta = np.radians(theta_degrees)
+    
+    # True rotation matrix
+    R_true = np.eye(dim)
+    c, s = np.cos(theta), np.sin(theta)
+    for i in range(0, dim - 1, 2):
+        R_true[i, i] = c
+        R_true[i, i + 1] = -s
+        R_true[i + 1, i] = s
+        R_true[i + 1, i + 1] = c
+    
+    results = {}
+    
+    # Test each method
+    for method_name in ['cayley', 'householder', 'linear']:
+        # Generate trajectory
+        x0 = np.zeros(dim)
+        x0[0] = 1.0  # Start at [1, 0, 0, ...]
+        
+        trajectory = [x0.copy()]
+        x = x0.copy()
+        
+        # Method-specific parameters
+        if method_name == 'cayley':
+            M = get_skew_symmetric(dim, theta)
+            update_fn = cayley_update
+        elif method_name == 'householder':
+            # For Householder, we need to construct a reflection that 
+            # approximates the rotation. Two reflections = one rotation.
+            # But with ONE reflection, we can only flip, not rotate smoothly.
+            k = np.zeros(dim)
+            k[0] = np.cos(theta/2)
+            k[1] = np.sin(theta/2)
+            beta = 2.0  # Full reflection
+            
+            def householder_update(x, k=k, beta=beta):
+                dot = np.dot(k, x)
+                return x - beta * dot * k
+            
+            update_fn = householder_update
+            M = None  # Not used
+        else:  # linear
+            M = get_skew_symmetric(dim, theta)
+            update_fn = ddl_update
+        
+        # Generate trajectory
+        phase_errors = []
+        for step in range(num_steps):
+            if method_name == 'householder':
+                x_new = update_fn(x)
+            else:
+                x_new = update_fn(x, M)
+            
+            # True next state
+            x_true = R_true @ x
+            
+            # Compute phase error
+            phase_err = compute_phase_error(x_new, x_true)
+            phase_errors.append(phase_err)
+            
+            trajectory.append(x_new.copy())
+            x = x_new
+        
+        trajectory = np.array(trajectory)
+        
+        # Compute metrics
+        norms = np.linalg.norm(trajectory, axis=1)
+        direction_flips = count_direction_flips(trajectory)
+        
+        results[method_name] = {
+            'final_norm': norms[-1],
+            'norm_std': np.std(norms),
+            'mean_phase_error': np.mean(phase_errors),
+            'max_phase_error': np.max(phase_errors),
+            'direction_flips': direction_flips,
+            'trajectory': trajectory,
+        }
+    
+    return results
+
+
+def print_rotation_quality_table(results: dict, theta_degrees: float):
+    """Print rotation quality comparison table."""
+    print("\n" + "="*70)
+    print(f"ROTATION QUALITY ANALYSIS (θ = {theta_degrees}°)")
+    print("="*70)
+    print(f"{'Method':<15} {'Final Norm':<12} {'Phase Error':<15} {'Dir Flips':<12}")
+    print("-"*70)
+    
+    for method, data in results.items():
+        norm_str = f"{data['final_norm']:.4f}"
+        phase_str = f"{np.degrees(data['mean_phase_error']):.2f}°"
+        flips_str = str(data['direction_flips'])
+        
+        # Status indicators
+        if data['final_norm'] > 2 or data['final_norm'] < 0.5:
+            norm_str += " ❌"
+        elif abs(data['final_norm'] - 1.0) < 0.01:
+            norm_str += " ✅"
+        
+        if data['mean_phase_error'] < 0.01:
+            phase_str += " ✅"
+        elif data['mean_phase_error'] > 0.5:
+            phase_str += " ❌"
+        
+        print(f"{method.upper():<15} {norm_str:<12} {phase_str:<15} {flips_str:<12}")
+    
+    print("="*70)
+
+
 def main():
     parser = argparse.ArgumentParser(description='Analyze Gyroscope Experiment Results')
     parser.add_argument('--dim', type=int, default=16, help='Vector dimension')
@@ -419,6 +594,12 @@ def main():
         os.path.join(args.output_dir, 'angle_accuracy.png')
     )
     print_angle_table(angle_results)
+    
+    # 2.5 NEW: Rotation quality analysis (Cayley vs Householder vs Linear)
+    print("\n[2.5/4] Analyzing rotation quality (Phase errors, Direction flips)...")
+    for test_theta in [30, 45, 60, 90]:
+        rotation_results = analyze_rotation_quality(dim=args.dim, theta_degrees=test_theta, num_steps=50)
+        print_rotation_quality_table(rotation_results, test_theta)
     
     # 3. Analyze gate history (if available)
     print("\n[3/4] Analyzing gate behavior...")
