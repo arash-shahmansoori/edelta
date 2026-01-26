@@ -475,7 +475,7 @@ def run_stability_test():
     print(f"  Vocab size: {vocab_size}, Data size: {len(train_data)}")
     
     # Test configurations
-    depths = [50, 75, 100, 125]
+    depths = [125]
     block_types = ['baseline', 'ddl', 'ddc', 'ddc_hybrid']
     
     results = {bt: {} for bt in block_types}

@@ -10,4 +10,5 @@ dependencies = [
   "tiktoken",
   "wandb",
   "tqdm",
+  "matplotlib>=3.10.8",
 ]

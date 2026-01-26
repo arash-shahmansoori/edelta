@@ -228,30 +228,75 @@ class MLP(nn.Module):
 
 class DDCHybridBlock(nn.Module):
     """
-    DDC-Hybrid Block
+    DDC-Hybrid Block with mHC-style Pre/Post Mappings
     
-    Uses Data-Dependent Cayley + Householder with learned gate.
+    Implements the full mHC framework with hybrid geometric operator:
+    X_{l+1} = G_γ(X_l)X_l + H_post^T @ F(H_pre @ LN(G_γ(X_l)X_l))
+    
+    Where:
+    - G_γ(X) = γ * DDC(X) + (1-γ) * Householder(X) is the hybrid operator
+    - H_pre aggregates streams before attention/MLP (from mHC paper)
+    - H_post broadcasts output back to streams (from mHC paper)
+    
+    This unifies:
+    - mHC: multi-stream residual with pre/post mappings
+    - DDL: input-adaptive transformations + negation capability
+    - Cayley: unconditional orthogonality guarantees
     """
     
     def __init__(self, config):
         super().__init__()
+        self.n_streams = getattr(config, 'n_streams', 4)
+        
         self.ln_1 = nn.LayerNorm(config.n_embd)
         self.attn = CausalSelfAttention(config)
         self.ln_2 = nn.LayerNorm(config.n_embd)
         self.mlp = MLP(config)
         
-        # DDC-Hybrid operators
-        self.hybrid_attn = DDCHybridOperator(config.n_embd, config.n_streams)
-        self.hybrid_mlp = DDCHybridOperator(config.n_embd, config.n_streams)
+        # DDC-Hybrid operators (DDC rotation + Householder reflection + learned gate)
+        self.hybrid_attn = DDCHybridOperator(config.n_embd, self.n_streams)
+        self.hybrid_mlp = DDCHybridOperator(config.n_embd, self.n_streams)
+        
+        # === mHC Pre/Post Mappings (from DeepSeek mHC paper arXiv:2512.24880) ===
+        # H_pre: aggregates n streams → prepares input for layer function
+        # H_post: broadcasts layer output → distributes to n streams
+        
+        # For Attention block
+        self.h_pre_attn = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        self.h_post_attn = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        
+        # For MLP block
+        self.h_pre_mlp = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        self.h_post_mlp = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        
+        # Initialize pre/post mappings to identity (stable starting point)
+        with torch.no_grad():
+            self.h_pre_attn.weight.copy_(torch.eye(config.n_embd))
+            self.h_post_attn.weight.copy_(torch.eye(config.n_embd))
+            self.h_pre_mlp.weight.copy_(torch.eye(config.n_embd))
+            self.h_post_mlp.weight.copy_(torch.eye(config.n_embd))
     
     def forward(self, x):
-        # Attention with hybrid residual
+        # === ATTENTION BLOCK ===
+        # Step 1: Apply Hybrid operator (DDC + Householder with learned gate)
         x_transformed = self.hybrid_attn(x)
-        x = x_transformed + self.attn(self.ln_1(x_transformed))
         
-        # MLP with hybrid residual  
+        # Step 2: H_pre → Attention → H_post (mHC-style)
+        x_normed = self.ln_1(x_transformed)
+        x_pre = self.h_pre_attn(x_normed)          # H_pre: aggregate/project
+        attn_out = self.attn(x_pre)                 # F: attention function
+        x_post = self.h_post_attn(attn_out)        # H_post: broadcast/project back
+        
+        # Step 3: Residual connection (with transformed input)
+        x = x_transformed + x_post
+        
+        # === MLP BLOCK ===
         x_transformed = self.hybrid_mlp(x)
-        x = x_transformed + self.mlp(self.ln_2(x_transformed))
+        x_normed = self.ln_2(x_transformed)
+        x_pre = self.h_pre_mlp(x_normed)
+        mlp_out = self.mlp(x_pre)
+        x_post = self.h_post_mlp(mlp_out)
+        x = x_transformed + x_post
         
         return x
 

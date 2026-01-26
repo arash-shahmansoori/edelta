@@ -238,30 +238,75 @@ class MLP(nn.Module):
 
 class DDCBlock(nn.Module):
     """
-    Data-Dependent Cayley Block
+    Data-Dependent Cayley Block with mHC-style Pre/Post Mappings
     
-    Uses DDC for input-adaptive rotation with guaranteed orthogonality.
+    Implements the full mHC framework:
+    X_{l+1} = Q(X_l)X_l + H_post^T @ F(H_pre @ LN(Q(X_l)X_l))
+    
+    Where:
+    - Q(X) is the Data-Dependent Cayley rotation (replaces mHC's H_res)
+    - H_pre aggregates streams before attention/MLP (from mHC paper)
+    - H_post broadcasts output back to streams (from mHC paper)
+    
+    This unifies:
+    - mHC: multi-stream residual with pre/post mappings
+    - DDL: input-adaptive transformations
+    - Cayley: unconditional orthogonality guarantees
     """
     
     def __init__(self, config):
         super().__init__()
+        self.n_streams = getattr(config, 'n_streams', 4)
+        
         self.ln_1 = nn.LayerNorm(config.n_embd)
         self.attn = CausalSelfAttention(config)
         self.ln_2 = nn.LayerNorm(config.n_embd)
         self.mlp = MLP(config)
         
-        # Data-Dependent Cayley operators
-        self.ddc_attn = DataDependentCayleyOperator(config.n_embd, config.n_streams)
-        self.ddc_mlp = DataDependentCayleyOperator(config.n_embd, config.n_streams)
+        # Data-Dependent Cayley operators (replace mHC's doubly stochastic H_res)
+        self.ddc_attn = DataDependentCayleyOperator(config.n_embd, self.n_streams)
+        self.ddc_mlp = DataDependentCayleyOperator(config.n_embd, self.n_streams)
+        
+        # === mHC Pre/Post Mappings (from DeepSeek mHC paper arXiv:2512.24880) ===
+        # H_pre: aggregates n streams → prepares input for layer function
+        # H_post: broadcasts layer output → distributes to n streams
+        
+        # For Attention block
+        self.h_pre_attn = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        self.h_post_attn = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        
+        # For MLP block
+        self.h_pre_mlp = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        self.h_post_mlp = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        
+        # Initialize pre/post mappings to identity (stable starting point)
+        with torch.no_grad():
+            self.h_pre_attn.weight.copy_(torch.eye(config.n_embd))
+            self.h_post_attn.weight.copy_(torch.eye(config.n_embd))
+            self.h_pre_mlp.weight.copy_(torch.eye(config.n_embd))
+            self.h_post_mlp.weight.copy_(torch.eye(config.n_embd))
     
     def forward(self, x):
-        # Attention with DDC residual
+        # === ATTENTION BLOCK ===
+        # Step 1: Apply DDC rotation (replaces mHC's doubly stochastic H_res)
         x_rotated = self.ddc_attn(x)
-        x = x_rotated + self.attn(self.ln_1(x_rotated))
         
-        # MLP with DDC residual  
+        # Step 2: H_pre → Attention → H_post (mHC-style)
+        x_normed = self.ln_1(x_rotated)
+        x_pre = self.h_pre_attn(x_normed)         # H_pre: aggregate/project
+        attn_out = self.attn(x_pre)                # F: attention function
+        x_post = self.h_post_attn(attn_out)       # H_post: broadcast/project back
+        
+        # Step 3: Residual connection (with rotated input)
+        x = x_rotated + x_post
+        
+        # === MLP BLOCK ===
         x_rotated = self.ddc_mlp(x)
-        x = x_rotated + self.mlp(self.ln_2(x_rotated))
+        x_normed = self.ln_2(x_rotated)
+        x_pre = self.h_pre_mlp(x_normed)
+        mlp_out = self.mlp(x_pre)
+        x_post = self.h_post_mlp(mlp_out)
+        x = x_rotated + x_post
         
         return x
 

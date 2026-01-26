@@ -1,11 +1,63 @@
 # Geodesic-Delta Research: Next Steps & Future Directions
 
 **Last Updated:** January 26, 2026
-**Status:** 🔬 **Continuous Rotation Analysis Complete - DDL Failure Proven!**
+**Status:** 🔬 **Gradient Stability Test Complete - DDC-Hybrid Wins at 125 Layers!**
 
 ---
 
-## 🚨 BREAKING: Mathematical Proof of DDL Failure
+## 🆕 LATEST: Gradient Stability Test Results (125 Layers)
+
+We tested **extremely deep networks (125 layers)** to evaluate gradient stability of geometric operators.
+
+### Results Summary
+
+| Model | Final Loss | Mean Grad Norm | Max Grad Norm | vs Baseline |
+|-------|------------|----------------|---------------|-------------|
+| **ddc_hybrid** | **0.0028** | 0.30 | 407.43 | **28x better** 🏆 |
+| ddl | 0.0052 | **0.27** | 54.36 | 15x better |
+| ddc | 0.0171 | 0.42 | 94.59 | 4.6x better |
+| baseline | 0.0787 | 0.35 | 26.44 | 1x (reference) |
+
+### Key Findings
+
+1. **✅ All models stable at 125 layers** - No gradient explosion in any model
+2. **🏆 DDC-Hybrid achieves BEST final loss** (0.0028) - 28x better than baseline
+3. **DDL has lowest mean gradient norm** (0.27) - Most stable gradients
+4. **Geometric operators dramatically outperform baseline** - 4.6x to 28x improvement
+
+### Analysis
+
+```
+PERFORMANCE RANKING (125 layers, lower loss = better):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🥇 DDC-Hybrid  0.0028  ████████████████████████████  (28x)
+🥈 DDL         0.0052  ███████████████               (15x)
+🥉 DDC         0.0171  █████                         (4.6x)
+4th Baseline   0.0787  █                             (1x)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### Interpretation
+
+| Finding | Meaning |
+|---------|---------|
+| **DDC-Hybrid wins on loss** | Combining rotation + reflection is most expressive |
+| **DDL wins on gradient stability** | Householder reflection provides excellent gradient flow |
+| **DDC beats baseline** | Cayley rotation helps but less than reflection |
+| **All 4 stable at 125 layers** | Modern deep learning handles depth well |
+
+### Why DDC-Hybrid is Best
+
+DDC-Hybrid combines:
+- **DDC (Cayley rotation)**: Unconditional orthogonality, geometric reasoning
+- **Householder reflection**: Negation capability (eigenvalue -1)
+- **Learned gate**: Adaptively selects optimal operator per input
+
+This matches our theory: **rotation alone is insufficient** (cannot negate), but **rotation + reflection together** achieves both geometric transformations AND belief revision.
+
+---
+
+## 🚨 PREVIOUS: Mathematical Proof of DDL Failure (Continuous Rotation)
 
 We have designed and validated the **Continuous Gyroscope** task—a definitive test that exposes the fundamental limitation of Deep Delta Learning (DDL).
 
@@ -606,6 +658,12 @@ edelta/
 
 ### What We Learned (Updated Jan 2026)
 
+**On Gradient Stability (125 layers):**
+1. 🏆 **DDC-Hybrid achieves BEST final loss** (0.0028) - 28x better than baseline
+2. ✅ **DDL has most stable gradients** (mean norm 0.27)
+3. ✅ **All geometric operators outperform baseline** - 4.6x to 28x better
+4. ✅ **Rotation + Reflection > Rotation alone** - DDC-Hybrid beats pure DDC
+
 **On Geometric Tasks (rotation2d):**
 1. 🏆 **Geodesic-only is BEST** - Pure rotation without mHC mixing wins
 2. ❌ **mHC mixing HURTS** - Adds parameters but degrades performance
@@ -618,6 +676,14 @@ edelta/
 4. ⚠️ **Specialization > Generalization** - Pure DDL still 31x better than Hybrid
 
 ### Key Findings 🎉
+
+**Gradient Stability Test (125 Layers) - NEW:**
+```
+DDC-Hybrid:    0.0028  ← 🏆 BEST (rotation + reflection)
+DDL:           0.0052  ← 15x better than baseline
+DDC:           0.0171  ← 4.6x better than baseline
+Baseline:      0.0787  ← Reference
+```
 
 **Correction Task Results:**
 ```
@@ -635,6 +701,11 @@ Cayley Rotation:        All eigenvalues on unit circle → CANNOT negate
 
 For corrections ("Actually, no"), you need NEGATION (reflection)
 not ROTATION (Cayley). This is a fundamental mathematical limit.
+
+HYBRID SOLUTION: Combine both operators with learned gate
+- DDC provides rotation (geometric reasoning, unconditional orthogonality)
+- Householder provides reflection (negation, belief revision)
+- Gate learns WHEN to use each → 28x better than baseline at 125 layers
 ```
 
 ### Architectural Recommendations

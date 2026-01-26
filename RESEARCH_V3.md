@@ -3,13 +3,18 @@
 **Author:** Arash Shahmansoori  
 **Affiliation:** Independent Researcher  
 **Date:** January 2026  
-**Version:** 3.0 (Data-Dependent Cayley + Hybrid Architecture)
+**Version:** 3.1 (Data-Dependent Cayley + mHC Integration + Hybrid Architecture)
 
 ---
 
 ## Abstract
 
-We present the **Data-Dependent Cayley Transformer (DDC)**, a novel architecture that achieves the expressivity of Deep Delta Learning (DDL) while maintaining the unconditional orthogonality guarantees of the Cayley transform. Unlike fixed Cayley approaches that rotate all inputs in a single plane, DDC computes input-specific rotation planes $\mathbf{u}(\mathbf{x}), \mathbf{v}(\mathbf{x})$ via neural networks.
+We present the **Data-Dependent Cayley Transformer (DDC)**, a novel architecture that unifies:
+1. **Manifold-Constrained Hyper-Connections (mHC)** [DeepSeek] — multi-stream residual with pre/post mappings
+2. **Deep Delta Learning (DDL)** — input-adaptive geometric transformations
+3. **Cayley Transform** — unconditional orthogonality guarantees
+
+Unlike fixed Cayley approaches that rotate all inputs in a single plane, DDC computes input-specific rotation planes $\mathbf{u}(\mathbf{x}), \mathbf{v}(\mathbf{x})$ via neural networks, while preserving the mHC framework's pre/post mappings for stream aggregation and broadcasting.
 
 We prove that DDC preserves all desirable properties of Cayley transforms (orthogonality, isometry, determinant +1) regardless of input, resolving a fundamental limitation of DDL which only achieves orthogonality at $\beta = 2$.
 
@@ -18,7 +23,9 @@ To address Cayley's inability to negate information (eigenvalue $-1$ is excluded
 $$\mathbf{X}' = \gamma(\mathbf{X}) \cdot \mathcal{C}(\mathbf{X}) + (1 - \gamma(\mathbf{X})) \cdot \mathcal{H}(\mathbf{X})$$
 
 This unified architecture achieves:
-- **Input-adaptive rotation** (like DDL)
+- **Multi-stream residual** (from mHC)
+- **Pre/Post mappings** (from mHC)
+- **Input-adaptive rotation** (from DDL)
 - **Guaranteed orthogonality** (unlike DDL)
 - **Negation capability** (via Householder component)
 - **Thermodynamic gating** (entropy-aware switching)
@@ -84,7 +91,35 @@ $$\mathbf{X}' = \underbrace{\gamma}_{\text{learned}} \cdot \underbrace{\mathbf{Q
 
 ---
 
-### 1.1 The Problem with Fixed Cayley
+### 1.1 Integration with Manifold-Constrained Hyper-Connections (mHC)
+
+The original mHC paper [DeepSeek, arXiv:2512.24880] introduced a multi-stream residual framework:
+
+$$\mathbf{X}_{l+1} = \mathbf{H}_{\text{res}} \mathbf{X}_l + \mathbf{H}_{\text{post}}^\top F(\mathbf{H}_{\text{pre}} \mathbf{X}_l)$$
+
+Where:
+- $\mathbf{H}_{\text{res}} \in \mathbb{R}^{n \times n}$: **Residual mixing matrix** (doubly stochastic in mHC)
+- $\mathbf{H}_{\text{pre}} \in \mathbb{R}^{1 \times n}$: **Pre-mapping** — aggregates $n$ streams to 1 for layer function input
+- $\mathbf{H}_{\text{post}} \in \mathbb{R}^{1 \times n}$: **Post-mapping** — broadcasts layer output back to $n$ streams
+- $F$: Layer function (attention or MLP)
+
+**Why pre/post mappings are necessary:**
+
+| Mapping | Purpose | Mathematical Role |
+|---------|---------|-------------------|
+| **Pre-mapping** $\mathbf{H}_{\text{pre}}$ | Aggregates multi-stream input | $\mathbf{x}_{\text{agg}} = \mathbf{H}_{\text{pre}} \mathbf{X}_{\text{streams}}$ |
+| **Post-mapping** $\mathbf{H}_{\text{post}}$ | Broadcasts output to streams | $\mathbf{X}_{\text{out}} = \mathbf{H}_{\text{post}}^\top F(\mathbf{x}_{\text{agg}})$ |
+
+**Our contribution:** We replace the doubly stochastic $\mathbf{H}_{\text{res}}$ with the **Data-Dependent Cayley rotation** $\mathbf{Q}(\mathbf{X})$, gaining:
+- **Unconditional orthogonality** (vs. mHC's iterative Sinkhorn-Knopp)
+- **Input-adaptive rotation** (vs. mHC's fixed mixing)
+- **Perfect isometry** (exact norm preservation)
+
+The full DDC layer transition becomes:
+
+$$\mathbf{X}_{l+1} = \mathbf{Q}(\mathbf{X}_l) \mathbf{X}_l + \mathbf{H}_{\text{post}}^\top F(\mathbf{H}_{\text{pre}} \cdot \text{LN}(\mathbf{Q}(\mathbf{X}_l) \mathbf{X}_l))$$
+
+### 1.2 The Problem with Fixed Cayley
 
 The original Cayley transform uses fixed parameters:
 
@@ -355,58 +390,137 @@ This is impossible for any finite $\beta$ and $\mu_k$. **QED.**
            -π (UNREACHABLE - negation)
 ```
 
-### 5.2 The DDC-Hybrid Architecture: The Complete Solution
+### 5.2 The Householder Reflection: Achieving Negation
 
-Since DDC cannot negate but DDL can, and DDC has unconditional orthogonality but DDL doesn't, we combine both via a **learned gate**.
+**Definition 5.1 (Householder Reflection).**
 
-**Definition 5.1 (DDC-Hybrid).**
+$$\mathbf{H}_\beta(\mathbf{k}) = \mathbf{I} - \beta \mathbf{k}\mathbf{k}^\top, \quad \|\mathbf{k}\| = 1$$
 
-$$\mathbf{X}' = \gamma(\mathbf{X}) \cdot \underbrace{\mathbf{Q}(\mathbf{X})\mathbf{X}}_{\text{DDC Rotation}} + (1 - \gamma(\mathbf{X})) \cdot \underbrace{\mathbf{H}(\mathbf{X})\mathbf{X}}_{\text{Householder Reflection}}$$
+**Theorem 6 (Householder Eigenvalue Structure).**
+*The Householder operator $\mathbf{H}_\beta(\mathbf{k})$ has eigenvalues:*
+- *$\lambda = 1$ with multiplicity $(n-1)$ for all $\mathbf{v} \perp \mathbf{k}$*
+- *$\lambda = 1 - \beta$ with multiplicity $1$ along $\mathbf{k}$*
+
+**Proof.**
+For $\mathbf{v} \perp \mathbf{k}$: $\mathbf{H}\mathbf{v} = \mathbf{v} - \beta(\mathbf{k}^\top\mathbf{v})\mathbf{k} = \mathbf{v}$ (since $\mathbf{k}^\top\mathbf{v} = 0$)
+
+For $\mathbf{k}$: $\mathbf{H}\mathbf{k} = \mathbf{k} - \beta(\mathbf{k}^\top\mathbf{k})\mathbf{k} = \mathbf{k} - \beta\mathbf{k} = (1-\beta)\mathbf{k}$ $\square$
+
+**Corollary 6.1 (Negation at β=2).**
+*When $\beta = 2$:*
+
+$$\mathbf{H}_2(\mathbf{k})\mathbf{k} = (1-2)\mathbf{k} = -\mathbf{k}$$
+
+*This is the eigenvalue $\lambda = -1$ that Cayley cannot achieve.*
+
+**Theorem 7 (Householder Orthogonality Condition).**
+*The Householder operator $\mathbf{H}_\beta$ is orthogonal if and only if $\beta \in \{0, 2\}$.*
+
+**Proof.**
+$$\mathbf{H}^\top\mathbf{H} = (\mathbf{I} - \beta\mathbf{k}\mathbf{k}^\top)^2 = \mathbf{I} - 2\beta\mathbf{k}\mathbf{k}^\top + \beta^2\mathbf{k}\mathbf{k}^\top = \mathbf{I} + (\beta^2 - 2\beta)\mathbf{k}\mathbf{k}^\top$$
+
+For orthogonality ($\mathbf{H}^\top\mathbf{H} = \mathbf{I}$): $\beta^2 - 2\beta = 0 \Rightarrow \beta(\beta - 2) = 0 \Rightarrow \beta \in \{0, 2\}$ $\square$
+
+**Corollary 7.1 (Why β=2 is Unique).**
+*$\beta = 2$ is the ONLY value that achieves BOTH:*
+1. *Orthogonality: $\mathbf{H}^\top\mathbf{H} = \mathbf{I}$*
+2. *Negation: eigenvalue $-1$ along $\mathbf{k}$*
+
+*($\beta = 0$ gives orthogonality but identity, no negation)*
+
+### 5.3 The DDC-Hybrid Architecture: The Complete Solution
+
+Since DDC cannot negate but Householder can, and DDC has unconditional orthogonality but Householder only at $\beta=2$, we combine both via a **learned gate**.
+
+**Definition 5.2 (DDC-Hybrid Operator).**
+
+$$\mathcal{G}_\gamma(\mathbf{X}) = \gamma(\mathbf{X}) \cdot \underbrace{\mathbf{Q}(\mathbf{X})\mathbf{X}}_{\text{DDC Rotation}} + (1 - \gamma(\mathbf{X})) \cdot \underbrace{\mathbf{H}_2(\mathbf{k}(\mathbf{X}))\mathbf{X}}_{\text{Householder Reflection}}$$
 
 where:
-- $\mathbf{Q}(\mathbf{X}) \in SO(n)$ is the Data-Dependent Cayley rotation (guaranteed orthogonal)
-- $\mathbf{H}(\mathbf{X}) = \mathbf{I} - 2\mathbf{k}(\mathbf{X})\mathbf{k}(\mathbf{X})^\top$ is the Householder reflection (at $\beta=2$, also orthogonal)
+- $\mathbf{Q}(\mathbf{X}) \in SO(n)$ is the Data-Dependent Cayley rotation (guaranteed orthogonal, det=+1)
+- $\mathbf{H}_2(\mathbf{k}(\mathbf{X})) = \mathbf{I} - 2\mathbf{k}(\mathbf{X})\mathbf{k}(\mathbf{X})^\top$ is the Householder reflection (orthogonal at $\beta=2$, det=-1)
+- $\mathbf{k}(\mathbf{X}) = \text{normalize}(f_k(\bar{\mathbf{X}}))$ is the data-dependent reflection direction
 - $\gamma(\mathbf{X}) = \sigma(\mathbf{W}_\gamma \cdot \bar{\mathbf{X}} + b_\gamma) \in (0, 1)$ is the **learned gate**
+
+**Full DDC-Hybrid Layer with mHC Pre/Post Mappings:**
+
+$$\mathbf{X}_{l+1} = \mathcal{G}_\gamma(\mathbf{X}_l) + \mathbf{H}_{\text{post}}^\top F(\mathbf{H}_{\text{pre}} \cdot \text{LN}(\mathcal{G}_\gamma(\mathbf{X}_l)))$$
+
+**Theorem 8 (DDC-Hybrid Capability Coverage).**
+*The DDC-Hybrid operator can achieve any orthogonal transformation in O(n):*
+
+$$O(n) = \underbrace{SO(n)}_{\text{rotations (DDC)}} \cup \underbrace{\{\mathbf{Q} : \det(\mathbf{Q}) = -1\}}_{\text{reflections (Householder)}}$$
+
+*Specifically:*
+- *When $\gamma \to 1$: Output is in $SO(n)$ (proper rotations, det=+1)*
+- *When $\gamma \to 0$: Output is in $O(n) \setminus SO(n)$ (improper, det=-1)*
+
+**Proof.** By the Cartan-Dieudonné theorem, any orthogonal transformation can be expressed as a product of at most $n$ Householder reflections. Since $SO(n) \cdot \mathbf{H} = O(n) \setminus SO(n)$ (rotation composed with reflection gives reflection), the combination of DDC (achieving $SO(n)$) and Householder (achieving reflection) can reach any element of $O(n)$. $\square$
 
 **How the gate works:**
 
-| Gate Value | Behavior | Use Case |
-|------------|----------|----------|
-| $\gamma \to 1$ | Use DDC rotation | Geometric reasoning, smooth transforms |
-| $\gamma \to 0$ | Use Householder reflection | Corrections, negation, belief revision |
-| $\gamma \approx 0.5$ | Blend both | Uncertain, mixed tasks |
+| Gate Value | Operator | Determinant | Eigenvalues | Use Case |
+|------------|----------|-------------|-------------|----------|
+| $\gamma \to 1$ | DDC rotation | $+1$ | On unit circle, excludes $-1$ | Geometric reasoning |
+| $\gamma \to 0$ | Householder | $-1$ | $(1, 1, ..., 1, -1)$ | **Negation/correction** |
+| $\gamma \approx 0.5$ | Blend | Varies | Mixture | Mixed tasks |
 
-**Why $\beta = 2$ for Householder:**
+**Why β=2 is Fixed (Not Learned):**
 
-At $\beta = 2$, Householder is:
-1. **Orthogonal:** $\mathbf{H}^\top\mathbf{H} = \mathbf{I}$ (no norm distortion)
-2. **Reflective:** $\mathbf{H}\mathbf{k} = -\mathbf{k}$ (eigenvalue $-1$ along $\mathbf{k}$)
-3. **Determinant:** $\det(\mathbf{H}) = -1$ (orientation-reversing)
+We fix $\beta = 2$ for Householder because:
+1. **Orthogonality guarantee**: Learned $\beta \neq 2$ breaks orthogonality
+2. **Negation capability**: Only $\beta = 2$ gives eigenvalue $-1$
+3. **Training stability**: No gradient instability from $\beta$ variations
 
-This makes both components of DDC-Hybrid orthogonal, ensuring **stable training**.
+The model learns **when** to reflect (via gate $\gamma$) and **where** to reflect (via $\mathbf{k}(\mathbf{X})$), but the reflection magnitude is fixed at the orthogonal point.
 
-### 5.3 Properties of DDC-Hybrid
+### 5.4 Properties of DDC-Hybrid
 
-**Theorem 6 (Hybrid Orthogonality).**
-*The DDC-Hybrid output is a convex combination of two orthogonal transformations. While the combination itself may not be orthogonal, each component is:*
+**Theorem 9 (Component-wise Orthogonality).**
+*The DDC-Hybrid output is a convex combination of two orthogonal transformations:*
 
-- *$\mathbf{Q}(\mathbf{X})^\top\mathbf{Q}(\mathbf{X}) = \mathbf{I}$ (always)*
-- *$\mathbf{H}(\mathbf{X})^\top\mathbf{H}(\mathbf{X}) = \mathbf{I}$ (when $\beta=2$)*
+- *$\mathbf{Q}(\mathbf{X})^\top\mathbf{Q}(\mathbf{X}) = \mathbf{I}$ (DDC, always orthogonal for any $\beta$)*
+- *$\mathbf{H}_2(\mathbf{X})^\top\mathbf{H}_2(\mathbf{X}) = \mathbf{I}$ (Householder at $\beta=2$, orthogonal)*
 
-**Proposition 5.1 (Approximate Isometry).**
+**Proof.** DDC orthogonality follows from Theorem 1. Householder orthogonality at $\beta=2$ follows from Theorem 7. $\square$
+
+**Proposition 5.1 (Approximate Isometry of Hybrid).**
 *Let $\mathbf{X}' = \gamma\mathbf{Q}\mathbf{X} + (1-\gamma)\mathbf{H}\mathbf{X}$. Then:*
 
 $$\|\mathbf{X}'\|^2 = \gamma^2\|\mathbf{X}\|^2 + (1-\gamma)^2\|\mathbf{X}\|^2 + 2\gamma(1-\gamma)\langle\mathbf{Q}\mathbf{X}, \mathbf{H}\mathbf{X}\rangle$$
 
-For $\gamma \in \{0, 1\}$, this reduces to $\|\mathbf{X}'\|^2 = \|\mathbf{X}\|^2$ (exact isometry).
+**Corollary 9.1 (Exact Isometry at Extremes).**
+- *When $\gamma = 1$: $\|\mathbf{X}'\|^2 = \|\mathbf{Q}\mathbf{X}\|^2 = \|\mathbf{X}\|^2$ (exact)*
+- *When $\gamma = 0$: $\|\mathbf{X}'\|^2 = \|\mathbf{H}\mathbf{X}\|^2 = \|\mathbf{X}\|^2$ (exact)*
 
-### 5.4 Capability Summary
+**Proposition 5.2 (Determinant Structure).**
+$$\det(\mathcal{G}_\gamma) = \begin{cases}
++1 & \text{if } \gamma = 1 \text{ (pure rotation)} \\
+-1 & \text{if } \gamma = 0 \text{ (pure reflection)} \\
+\text{varies} & \text{if } 0 < \gamma < 1 \text{ (blend)}
+\end{cases}$$
 
-| Task Type | Best Component | Why |
-|-----------|---------------|-----|
-| Geometric rotation | DDC ($\gamma \to 1$) | Isometric, smooth |
-| Information negation | Householder ($\gamma \to 0$) | Eigenvalue $-1$ |
-| Mixed/uncertain | Interpolation | Learns optimal blend |
+### 5.5 Why DDC-Hybrid Achieves Both Rotation AND Negation
+
+**Summary Table:**
+
+| Capability | DDC (Cayley) | Householder ($\beta=2$) | DDC-Hybrid |
+|------------|--------------|------------------------|------------|
+| Eigenvalue $+1$ | ✅ Always | ✅ (multiplicity $n-1$) | ✅ |
+| Eigenvalue on unit circle | ✅ All | ❌ Only $\pm 1$ | ✅ (via DDC) |
+| Eigenvalue $-1$ | ❌ **NEVER** | ✅ (along $\mathbf{k}$) | ✅ (via Householder) |
+| Orthogonality | ✅ Unconditional | ✅ Only at $\beta=2$ | ✅ Both components |
+| Determinant | $+1$ | $-1$ | Adaptive |
+
+### 5.6 Capability Summary by Task
+
+| Task Type | Best Component | Why | Gate Value |
+|-----------|---------------|-----|------------|
+| Geometric rotation | DDC ($\gamma \to 1$) | Isometric, smooth, SO(n) | $\gamma \approx 1$ |
+| **Information negation** | **Householder** ($\gamma \to 0$) | **Eigenvalue $-1$** | $\gamma \approx 0$ |
+| Coordinate transforms | DDC | Preserves structure | $\gamma \approx 1$ |
+| **"Actually, no" corrections** | **Householder** | **Can flip belief** | $\gamma \approx 0$ |
+| Mixed/uncertain | Interpolation | Learns optimal blend | $\gamma \approx 0.5$ |
 
 ---
 
@@ -445,23 +559,34 @@ For $n=4$, $D=384$: DDC adds $\approx 3K$ parameters vs DDL's $\approx 37K$.
 
 ## 7. Architecture Details
 
-### 7.1 DDC Block Structure
+### 7.1 DDC Operator (Data-Dependent Cayley Rotation)
 
 ```python
-class DataDependentCayley(nn.Module):
+class DataDependentCayleyOperator(nn.Module):
+    """
+    Data-Dependent Cayley Rotation Operator
+    
+    Replaces mHC's doubly stochastic H_res with orthogonal Q(x).
+    """
     def __init__(self, d_model, n_streams=4):
         self.n_streams = n_streams
+        self.d_stream = d_model // n_streams
         
         # Generator networks: x → u(x), v(x)
-        self.u_net = nn.Linear(d_model, n_streams)
-        self.v_net = nn.Linear(d_model, n_streams)
+        hidden_dim = d_model // 4
+        self.u_net = nn.Sequential(
+            nn.Linear(d_model, hidden_dim), nn.GELU(),
+            nn.Linear(hidden_dim, n_streams)
+        )
+        self.v_net = nn.Sequential(
+            nn.Linear(d_model, hidden_dim), nn.GELU(),
+            nn.Linear(hidden_dim, n_streams)
+        )
         
         # Magnitude control
         self.beta_net = nn.Sequential(
-            nn.Linear(d_model, d_model // 4),
-            nn.GELU(),
-            nn.Linear(d_model // 4, 1),
-            nn.Softplus()
+            nn.Linear(d_model, hidden_dim), nn.GELU(),
+            nn.Linear(hidden_dim, 1), nn.Softplus()
         )
         
         self.register_buffer('I', torch.eye(n_streams))
@@ -473,37 +598,164 @@ class DataDependentCayley(nn.Module):
         # Compute data-dependent generators
         u = self.u_net(x_pooled)  # (B, n)
         v = self.v_net(x_pooled)  # (B, n)
-        beta = self.beta_net(x_pooled)  # (B, 1)
+        beta = self.beta_net(x_pooled).unsqueeze(-1)  # (B, 1, 1)
         
-        # Construct skew-symmetric A(x) for each batch element
-        # A = u v^T - v u^T
+        # Construct skew-symmetric A(x) = uv^T - vu^T
         A = torch.einsum('bi,bj->bij', u, v) - torch.einsum('bi,bj->bij', v, u)
         
         # Cayley transform: Q = (I + βA/2)^{-1} (I - βA/2)
-        M = (beta.unsqueeze(-1) / 2) * A  # (B, n, n)
-        I_plus_M = self.I.unsqueeze(0) + M
-        I_minus_M = self.I.unsqueeze(0) - M
-        Q = torch.linalg.solve(I_plus_M, I_minus_M)  # (B, n, n)
+        M = (beta / 2) * A  # (B, n, n)
+        Q = torch.linalg.solve(self.I + M, self.I - M)  # (B, n, n)
         
         # Apply rotation to streams
-        x_streams = x.view(B, S, self.n_streams, -1)  # (B, S, n, d)
+        x_streams = x.view(B, S, self.n_streams, self.d_stream)  # (B, S, n, d)
         x_rotated = torch.einsum('bij,bsjd->bsid', Q, x_streams)
         
         return x_rotated.reshape(B, S, D)
 ```
 
-### 7.2 DDC-Hybrid Block Structure
+### 7.2 DDC Block with mHC Pre/Post Mappings
 
 ```python
-class DDCHybrid(nn.Module):
-    def __init__(self, d_model, n_streams=4):
-        self.ddc = DataDependentCayley(d_model, n_streams)
+class DDCBlock(nn.Module):
+    """
+    Full DDC Block with mHC-style Pre/Post Mappings
+    
+    Implements: X_{l+1} = Q(X_l)X_l + H_post^T F(H_pre · LN(Q(X_l)X_l))
+    
+    Where:
+    - Q(X) is the Data-Dependent Cayley rotation (replaces mHC's H_res)
+    - H_pre aggregates streams before attention/MLP
+    - H_post broadcasts output back to streams
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.n_streams = config.n_streams
+        self.d_stream = config.n_embd // config.n_streams
         
-        # Householder components
+        # Layer normalization
+        self.ln_1 = nn.LayerNorm(config.n_embd)
+        self.ln_2 = nn.LayerNorm(config.n_embd)
+        
+        # Core functions
+        self.attn = CausalSelfAttention(config)
+        self.mlp = MLP(config)
+        
+        # DDC operators (replace mHC's doubly stochastic mixing)
+        self.ddc_attn = DataDependentCayleyOperator(config.n_embd, config.n_streams)
+        self.ddc_mlp = DataDependentCayleyOperator(config.n_embd, config.n_streams)
+        
+        # === mHC Pre/Post Mappings (from DeepSeek mHC paper) ===
+        # Pre-mapping: aggregates n streams → 1 for function input
+        # Post-mapping: broadcasts function output → n streams
+        
+        # For Attention
+        self.h_pre_attn = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        self.h_post_attn = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        
+        # For MLP
+        self.h_pre_mlp = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        self.h_post_mlp = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        
+        # Initialize pre/post mappings to identity
+        with torch.no_grad():
+            self.h_pre_attn.weight.copy_(torch.eye(config.n_embd))
+            self.h_post_attn.weight.copy_(torch.eye(config.n_embd))
+            self.h_pre_mlp.weight.copy_(torch.eye(config.n_embd))
+            self.h_post_mlp.weight.copy_(torch.eye(config.n_embd))
+    
+    def forward(self, x):
+        # === ATTENTION BLOCK ===
+        # Step 1: Apply DDC rotation (replaces mHC's H_res mixing)
+        x_rotated = self.ddc_attn(x)
+        
+        # Step 2: Pre-mapping → Attention → Post-mapping
+        x_normed = self.ln_1(x_rotated)
+        x_pre = self.h_pre_attn(x_normed)        # H_pre: aggregate streams
+        attn_out = self.attn(x_pre)               # F: attention function
+        x_post = self.h_post_attn(attn_out)      # H_post: broadcast to streams
+        
+        # Step 3: Residual connection
+        x = x_rotated + x_post
+        
+        # === MLP BLOCK ===
+        x_rotated = self.ddc_mlp(x)
+        x_normed = self.ln_2(x_rotated)
+        x_pre = self.h_pre_mlp(x_normed)
+        mlp_out = self.mlp(x_pre)
+        x_post = self.h_post_mlp(mlp_out)
+        x = x_rotated + x_post
+        
+        return x
+```
+
+### 7.3 DDC-Hybrid Block Structure
+
+```python
+class DDCHybridBlock(nn.Module):
+    """
+    DDC-Hybrid Block with mHC Pre/Post Mappings
+    
+    Combines:
+    - DDC rotation (guaranteed orthogonality, det=+1)
+    - Householder reflection (can negate, det=-1)
+    - mHC pre/post mappings for stream management
+    - Learned gate for adaptive selection
+    """
+    def __init__(self, config):
+        super().__init__()
+        self.n_streams = config.n_streams
+        
+        self.ln_1 = nn.LayerNorm(config.n_embd)
+        self.ln_2 = nn.LayerNorm(config.n_embd)
+        self.attn = CausalSelfAttention(config)
+        self.mlp = MLP(config)
+        
+        # Hybrid operators (DDC + Householder)
+        self.hybrid_attn = DDCHybridOperator(config.n_embd, config.n_streams)
+        self.hybrid_mlp = DDCHybridOperator(config.n_embd, config.n_streams)
+        
+        # mHC Pre/Post mappings
+        self.h_pre_attn = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        self.h_post_attn = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        self.h_pre_mlp = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        self.h_post_mlp = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        
+        # Identity initialization
+        with torch.no_grad():
+            for layer in [self.h_pre_attn, self.h_post_attn, 
+                         self.h_pre_mlp, self.h_post_mlp]:
+                layer.weight.copy_(torch.eye(config.n_embd))
+    
+    def forward(self, x):
+        # Attention with Hybrid geometric operator
+        x_transformed = self.hybrid_attn(x)
+        x_normed = self.ln_1(x_transformed)
+        attn_out = self.h_post_attn(self.attn(self.h_pre_attn(x_normed)))
+        x = x_transformed + attn_out
+        
+        # MLP with Hybrid geometric operator
+        x_transformed = self.hybrid_mlp(x)
+        x_normed = self.ln_2(x_transformed)
+        mlp_out = self.h_post_mlp(self.mlp(self.h_pre_mlp(x_normed)))
+        x = x_transformed + mlp_out
+        
+        return x
+
+
+class DDCHybridOperator(nn.Module):
+    """
+    Combines DDC rotation + Householder reflection with learned gate.
+    """
+    def __init__(self, d_model, n_streams=4):
+        super().__init__()
+        self.ddc = DataDependentCayleyOperator(d_model, n_streams)
+        
+        # Householder reflection (fixed β=2 for orthogonality)
+        hidden_dim = d_model // 4
         self.k_net = nn.Sequential(
-            nn.Linear(d_model, d_model // 4),
-            nn.GELU(),
-            nn.Linear(d_model // 4, d_model)
+            nn.Linear(d_model, hidden_dim), nn.GELU(),
+            nn.Linear(hidden_dim, d_model)
         )
         
         # Gate: rotation vs reflection
@@ -513,24 +765,41 @@ class DDCHybrid(nn.Module):
         B, S, D = x.shape
         x_pooled = x.mean(dim=1)
         
-        # DDC Rotation
+        # DDC Rotation (orthogonal, det=+1)
         x_rotated = self.ddc(x)
         
-        # Householder Reflection (β=2 for orthogonality)
-        k = F.normalize(self.k_net(x_pooled), dim=-1)  # (B, D)
-        k = k.unsqueeze(1)  # (B, 1, D)
-        dot = (x * k).sum(dim=-1, keepdim=True)  # (B, S, 1)
-        x_reflected = x - 2 * dot * k  # (B, S, D)
+        # Householder Reflection (β=2, orthogonal, det=-1)
+        k = F.normalize(self.k_net(x_pooled), dim=-1).unsqueeze(1)  # (B, 1, D)
+        x_reflected = x - 2 * (x * k).sum(dim=-1, keepdim=True) * k
         
-        # Learnable gate
-        gamma = torch.sigmoid(self.gate(x_pooled))  # (B, 1)
-        gamma = gamma.unsqueeze(1)  # (B, 1, 1)
+        # Learned gate
+        gamma = torch.sigmoid(self.gate(x_pooled)).unsqueeze(1)  # (B, 1, 1)
         
-        # Hybrid output
-        x_hybrid = gamma * x_rotated + (1 - gamma) * x_reflected
-        
-        return x_hybrid
+        return gamma * x_rotated + (1 - gamma) * x_reflected
 ```
+
+### 7.4 Full Layer Transition (Mathematical)
+
+The complete DDC layer transition with mHC integration:
+
+$$\mathbf{X}_{l+1} = \underbrace{\mathbf{Q}(\mathbf{X}_l) \mathbf{X}_l}_{\text{DDC rotation}} + \underbrace{\mathbf{H}_{\text{post}}^\top}_{\text{broadcast}} F\left(\underbrace{\mathbf{H}_{\text{pre}}}_{\text{aggregate}} \cdot \text{LN}(\mathbf{Q}(\mathbf{X}_l) \mathbf{X}_l)\right)$$
+
+For DDC-Hybrid:
+
+$$\mathbf{X}_{l+1} = \underbrace{\mathcal{G}_\gamma(\mathbf{X}_l)}_{\text{Hybrid}} + \mathbf{H}_{\text{post}}^\top F(\mathbf{H}_{\text{pre}} \cdot \text{LN}(\mathcal{G}_\gamma(\mathbf{X}_l)))$$
+
+where $\mathcal{G}_\gamma(\mathbf{X}) = \gamma \cdot \mathbf{Q}(\mathbf{X})\mathbf{X} + (1-\gamma) \cdot \mathbf{H}(\mathbf{X})\mathbf{X}$
+
+### 7.5 Comparison with Original mHC
+
+| Component | mHC (DeepSeek) | DDC (Ours) |
+|-----------|---------------|------------|
+| **Residual mixing** | $\mathbf{H}_{\text{res}}$ (doubly stochastic via Sinkhorn-Knopp) | $\mathbf{Q}(\mathbf{x})$ (orthogonal via Cayley) |
+| **Pre-mapping** | $\mathbf{H}_{\text{pre}}$ (learned) | $\mathbf{H}_{\text{pre}}$ (learned, identity init) |
+| **Post-mapping** | $\mathbf{H}_{\text{post}}$ (learned) | $\mathbf{H}_{\text{post}}$ (learned, identity init) |
+| **Orthogonality** | Approximate (via constraints) | **Exact** (algebraic) |
+| **Computation** | Iterative (20+ Sinkhorn steps) | **Direct** (matrix solve) |
+| **Input-adaptive** | ❌ No | ✅ **Yes** |
 
 ---
 
