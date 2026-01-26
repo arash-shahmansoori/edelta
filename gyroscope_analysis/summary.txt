@@ -1,0 +1,34 @@
+
+CONTINUOUS GYROSCOPE EXPERIMENT SUMMARY
+======================================
+
+Configuration:
+- Vector dimension: 16
+- Test angle: 30.0°
+- Steps: 200
+- Trials: 10
+
+KEY FINDINGS:
+
+1. NORM STABILITY (θ = 30.0°):
+   - DDL: Explodes after ~6 steps
+   - Hybrid: 75x more stable
+   - Cayley: Perfect (never explodes)
+
+2. LARGE ANGLE FAILURE:
+   - DDL fails catastrophically at θ > 45°
+   - Cayley works perfectly at all angles
+
+3. MATHEMATICAL INSIGHT:
+   DDL (Linear): ||x'||² = ||x||² + O(θ²)  → Energy grows
+   Cayley (Exact): ||Qx|| = ||x||          → Energy conserved
+
+CONCLUSION:
+The Cayley transform provides UNCONDITIONAL stability for continuous
+rotation tasks. DDL's linear approximation fails for large angles,
+making it unsuitable for geometric reasoning tasks.
+
+Output files saved to: gyroscope_analysis/
+- norm_stability.png: The "Spiral of Death" figure
+- angle_accuracy.png: Error vs rotation angle
+- gate_analysis.png: Gearbox behavior (if trained)

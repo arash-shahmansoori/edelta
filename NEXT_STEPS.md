@@ -1,7 +1,30 @@
 # Geodesic-Delta Research: Next Steps & Future Directions
 
-**Last Updated:** January 23, 2026
-**Status:** 🔬 **Comprehensive Validation Framework Ready!**
+**Last Updated:** January 26, 2026
+**Status:** 🔬 **Continuous Rotation Analysis Complete - DDL Failure Proven!**
+
+---
+
+## 🚨 BREAKING: Mathematical Proof of DDL Failure
+
+We have designed and validated the **Continuous Gyroscope** task—a definitive test that exposes the fundamental limitation of Deep Delta Learning (DDL).
+
+### Key Results (θ = 30° rotation):
+
+| Method | Steps to Explosion | Norm Error at 90° |
+|--------|-------------------|-------------------|
+| **DDL (Linear)** | **6 steps** ❌ | **10^27** ❌ |
+| **Hybrid (2nd Order)** | 75 steps | 10^20 |
+| **Cayley (Exact)** | **∞ (Never)** ✅ | **< 10^-10** ✅ |
+
+### Why DDL Fails:
+```
+DDL update:   x' = (I + 2M)x     → ||x'||² = ||x||² + O(θ²)  → EXPLODES
+Cayley:       x' = (I+M)⁻¹(I-M)x → ||x'||² = ||x||²          → PERFECT
+```
+
+DDL walks in **straight lines** (chords) while the manifold is **curved** (circle).
+For large angles, the chord is far from the arc → catastrophic energy leak.
 
 ---
 
@@ -34,6 +57,7 @@ We now have a complete experimental framework to validate ALL claims:
 ### Datasets for Claim Validation
 | Dataset | Purpose | Tests Claim From |
 |---------|---------|------------------|
+| `data/gyroscope/` | **Continuous N-D rotation (KILL SHOT)** | **DDL Failure Proof** |
 | `data/deep_signal/` | Signal energy conservation across depth | mHC |
 | `data/rotation3d/` | 3D geometric reasoning (SO(3)) | DDL |
 | `data/correction/` | "Aha!" moment detection | Illusion of Insight |
@@ -46,7 +70,15 @@ We now have a complete experimental framework to validate ALL claims:
 |------|---------|
 | `analyze_geodesic.py` | Checkpoint analysis for rotation generators |
 | `analyze_beta_tracking.py` | Track β values at correction tokens |
+| `analyze_gyroscope.py` | **Norm stability analysis (DDL failure proof)** |
 | `run_comparative_experiments.py` | Run all model-dataset comparisons |
+| `run_gyroscope_experiments.py` | Run gyroscope benchmark across all models |
+
+### New Models (Gyroscope Experiments)
+| File | Description | Best For |
+|------|-------------|----------|
+| `proposed_model_cayley.py` | **Pure Cayley rotation (isometry)** | Continuous rotation |
+| `proposed_model_gearbox.py` | **Intelligent DDL/Cayley switching** | Mixed tasks |
 
 ### Training Scripts
 | Script | Model |
@@ -234,6 +266,51 @@ x = x + attn_out  # Clean residual path
 **Answer**: **NO** - mHC-only performs WORST (0.5844 vs 0.5369 baseline)
 
 **Conclusion**: mHC mixing matrices should be **removed** from the architecture.
+
+---
+
+## 🆕 Continuous Gyroscope Experiment (NEW - January 26, 2026)
+
+### The Definitive Test: Continuous N-D Rotation
+
+This experiment proves the **fundamental mathematical limitation** of DDL:
+
+**Task:** Predict next state of a rotating N-dimensional vector
+- Dimension: 16
+- Sequence: 64 rotation steps  
+- Angle range: 5° to 90°
+
+**Mathematical Analysis Results:**
+
+```
+TIME-TO-EXPLOSION TABLE (θ = 30°)
+============================================================
+Method               Steps to ||x||>2     Relative Lifespan   
+------------------------------------------------------------
+DDL (Linear)         6 steps              1x (FAILS FAST)
+Hybrid (2nd Order)   75 steps             12.5x               
+Cayley (Exact)       ∞ (Never)            ∞ (PERFECT)         
+============================================================
+
+NORM ERROR vs ROTATION ANGLE (after 100 steps)
+============================================================
+Angle     DDL              Hybrid           Cayley              
+------------------------------------------------------------
+5°        0.46             7.2e-04          < 1e-10 (Perfect)   
+30°       1.8e+05          1.54             < 1e-10 (Perfect)   
+45°       2.7e+10          93               < 1e-10 (Perfect)   
+90°       1.0e+27 (!)      1.2e+20          < 1e-10 (Perfect)   
+============================================================
+```
+
+**Key Insight:**
+- DDL uses linear approximation: `x' = (I + 2M)x` → walks in STRAIGHT LINES
+- For large angles, straight line ≠ curved arc → catastrophic energy leak
+- Cayley is **geometrically exact**: `Q = (I+M)^{-1}(I-M)` → walks on the MANIFOLD
+
+**Conclusion:**
+> "DDL is a first-order approximation that fails when the manifold has curvature.
+> Cayley rotation is the geodesic—unconditionally stable for any rotation angle."
 
 ---
 

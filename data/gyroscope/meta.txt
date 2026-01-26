@@ -1,0 +1,17 @@
+Continuous Gyroscope Dataset
+==================================================
+Vector dimension: 16
+Sequence length: 64 steps
+Tokens per step: 16
+Total tokens per sequence: 1024
+Number of samples: 10000
+Vocabulary size: 128
+Theta range: 5.7° to 85.9°
+
+Train tokens: 9216000
+Val tokens: 1024000
+
+Angle distribution:
+  small: 2.9° - 17.2° (1966 samples)
+  medium: 17.2° - 45.8° (2947 samples)
+  large: 45.8° - 90.0° (5087 samples)
