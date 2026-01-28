@@ -167,8 +167,11 @@ def get_args():
     parser.add_argument('--compile', action='store_true')
     parser.add_argument('--seed', type=int, default=42)
     
-    # E∆-MHC-Geo specific
-    parser.add_argument('--gate_reg_weight', type=float, default=0.01)
+    # E∆-MHC-Geo specific (for ablation studies)
+    parser.add_argument('--gate_reg_weight', type=float, default=0.1,
+                        help='Weight for midpoint collapse regularization (0=disabled)')
+    parser.add_argument('--init_gate_bias', type=float, default=0.0,
+                        help='Initial gate bias (>0=prefer rotation, <0=prefer reflection)')
     
     return parser.parse_args()
 
@@ -222,6 +225,8 @@ def create_model(args, input_dim: int, block_size: int):
         
     elif args.model_type == 'edelta':
         print(f"\n=== E∆-MHC-Geo (Proposed) ===")
+        print(f"  init_gate_bias: {args.init_gate_bias}")
+        print(f"  gate_reg_weight: {args.gate_reg_weight}")
         config = EdeltaConfig(
             n_layer=args.n_layer,
             n_head=args.n_head,
@@ -232,6 +237,7 @@ def create_model(args, input_dim: int, block_size: int):
             block_size=block_size,
             vocab_size=1,
             gate_reg_weight=args.gate_reg_weight,
+            init_gate_bias=args.init_gate_bias,  # For ablation studies
         )
         core = EdeltaGPT(config)
         
@@ -393,13 +399,17 @@ def train(args):
     best_val_loss = float('inf')
     iter_num = 0
     
-    # Training log
+    # Training log with comprehensive metrics for research papers
+    # Following mHC paper (arXiv:2512.24880) metrics
     train_log = {
         'iter': [],
         'train_loss': [],
         'val_loss': [],
         'lr': [],
         'time': [],
+        'grad_norm': [],           # Gradient norm (before clipping)
+        'grad_norm_clipped': [],   # Gradient norm (after clipping)
+        'param_norm': [],          # Parameter norm
     }
     
     t0 = time.time()
@@ -447,20 +457,34 @@ def train(args):
         
         scaler.scale(loss).backward()
         
+        # Compute gradient norm BEFORE clipping (for stability analysis)
+        scaler.unscale_(optimizer)
+        grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), float('inf'))  # Just compute, don't clip
+        
+        # Apply gradient clipping
         if args.grad_clip > 0:
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+            grad_norm_clipped = torch.nn.utils.clip_grad_norm_(model.parameters(), args.grad_clip)
+        else:
+            grad_norm_clipped = grad_norm
         
         scaler.step(optimizer)
         scaler.update()
         optimizer.zero_grad(set_to_none=True)
         
-        # Logging
+        # Compute parameter norm
+        param_norm = sum(p.data.norm(2).item() ** 2 for p in model.parameters() if p.requires_grad) ** 0.5
+        
+        # Logging with gradient norms (following mHC paper style)
         if iter_num % args.log_interval == 0:
             t1 = time.time()
             dt = t1 - t0
             lossf = loss.item()
-            print(f"iter {iter_num}: loss {lossf:.6f}, time {dt*1000:.2f}ms, lr {lr:.6f}")
+            print(f"iter {iter_num}: loss {lossf:.6f}, grad_norm {grad_norm:.4f}, time {dt*1000:.2f}ms, lr {lr:.6f}")
+            
+            # Store gradient metrics
+            train_log['grad_norm'].append(float(grad_norm))
+            train_log['grad_norm_clipped'].append(float(grad_norm_clipped))
+            train_log['param_norm'].append(float(param_norm))
         
         iter_num += 1
     
