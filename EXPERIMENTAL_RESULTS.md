@@ -14,19 +14,83 @@ This document presents the experimental validation of the E∆-MHC-Geo (Geodesic
 
 ---
 
-## Unified Analysis
+## Figure 1: Training Dynamics
 
-![Unified Comparative Analysis](unified_analysis.png)
+![Training Dynamics](fig1_training_dynamics.png)
 
-*Figure 1: Comprehensive comparison across all three benchmark datasets. Top row: Linear scale MSE loss. Middle row: Log scale for magnitude comparison. Bottom: Improvement factors showing E∆-MHC-Geo's advantage.*
+*Training convergence across all three benchmark datasets. E∆-MHC-Geo (green) shows rapid convergence on gyroscope and achieves the lowest final loss. Note the log-scale y-axis showing orders of magnitude differences.*
+
+Key observations:
+- **Gyroscope**: E∆-MHC-Geo separates from baselines by step 500, achieving 10x lower loss
+- **Correction**: All models converge to similar performance (~10⁻⁵)
+- **Stability**: mHC (yellow) plateaus at much higher loss, indicating spectral collapse
 
 ---
 
-## Improvement Heatmap
+## Figure 2: Gyroscope - Error vs Rotation Angle
+
+![Gyroscope Angle Analysis](fig2_gyroscope_angle_analysis.png)
+
+*Left: Scatter plot of prediction error vs rotation angle θ. Right: Binned average with standard deviation bands.*
+
+Critical findings:
+- **E∆-MHC-Geo maintains low error across ALL angles** (green points consistently below others)
+- **Baselines show angle-independent error floor** (~10⁻³) due to linear approximation limitations
+- **DDL does NOT show dramatic breakdown at θ > 0.5** in this configuration (contradicting simple theory)
+- The gap between E∆-MHC-Geo and baselines is **consistent across the full angular range**
+
+---
+
+## Figure 3: Stability - Norm Drift Analysis
+
+![Stability Norm Drift](fig3_stability_norm_drift.png)
+
+*Left: Vector norm evolution over 500 autoregressive steps. Right: Absolute deviation from target norm ||v||=1.*
+
+Critical findings:
+- **mHC exhibits spectral collapse**: Norm shrinks to ~0.7 (30% signal loss!)
+- **E∆-MHC-Geo shows slight expansion**: Norm grows to ~1.15 (15% drift)
+- **GPT and DDL are surprisingly stable**: Near-perfect ||v||=1.0 maintenance
+- **mHC's doubly-stochastic constraint causes progressive signal dampening**
+
+This validates the theoretical prediction that mHC's eigenvalues |λ| < 1 cause information loss, while standard residual connections (GPT, DDL) can maintain norms through additive identity paths.
+
+---
+
+## Figure 4: Correction - Belief Flip Analysis
+
+![Correction Analysis](fig4_correction_analysis.png)
+
+*Left: Cosine similarity between predictions and targets over sequence position. Right: Flip accuracy at the signal point.*
+
+Key observations:
+- **All models achieve near-perfect flip accuracy** (0.999-1.000)
+- **The task is too easy** - models learn to recognize the signal pattern trivially
+- Future work needs harder negation scenarios (delayed signals, ambiguous contexts)
+
+---
+
+## Figure 5: Comprehensive Summary
+
+![Summary](fig5_summary.png)
+
+*Top row: Loss curves during training. Bottom left: Final performance comparison. Bottom middle: Improvement factors. Bottom right: Key findings summary.*
+
+---
+
+## Additional Visualizations
+
+### Unified Analysis (Bar Charts)
+
+![Unified Comparative Analysis](unified_analysis.png)
+
+*Bar chart comparison showing final validation loss across datasets.*
+
+### Improvement Heatmap
 
 ![Improvement Heatmap](improvement_heatmap.png)
 
-*Figure 2: E∆-MHC-Geo improvement ratio vs each baseline. Green indicates E∆-MHC-Geo is better. The 3261.7x improvement over mHC on stability is particularly striking.*
+*Heatmap showing E∆-MHC-Geo's improvement ratio vs each baseline. Green = better.*
 
 ---
 
