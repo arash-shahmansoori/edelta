@@ -1,12 +1,27 @@
 """
 Pure mHC Implementation (DeepSeek's Manifold-Constrained Hyper-Connections)
-Reference: arXiv:2512.24880v2
+Reference: arXiv:2512.24880
 
-This implements the REAL mHC with Sinkhorn-Knopp projection onto the
-doubly stochastic manifold, NOT a simplified linear approximation.
+This implements the REAL mHC with DATA-DEPENDENT Sinkhorn-Knopp projection 
+onto the doubly stochastic manifold, following the paper exactly.
+
+Architecture (Paper Equation 3):
+    x_{l+1} = H_l^res · x_l + H_l^post^T · F(H_l^pre · x_l, W_l)
+
+Coefficient Computation (Paper Equations 5, 7):
+    x̃_l' = RMSNorm(x̃_l)
+    H̃_l^pre = α^pre · (x̃_l' · φ^pre) + b^pre
+    H̃_l^post = α^post · (x̃_l' · φ^post) + b^post
+    H̃_l^res = α^res · mat(x̃_l' · φ^res) + b^res
+
+Final Mappings (Paper Equation 8):
+    H_l^pre = σ(H̃_l^pre)
+    H_l^post = 2σ(H̃_l^post)
+    H_l^res = Sinkhorn-Knopp(H̃_l^res)
 
 Key features:
 - Multi-stream residual (n streams, each of dimension d/n)
+- DATA-DEPENDENT coefficient computation (not static!)
 - Doubly stochastic mixing via Sinkhorn-Knopp algorithm
 - Signal energy conservation (rows and columns sum to 1)
 """
@@ -20,120 +35,189 @@ import torch.nn as nn
 from torch.nn import functional as F
 
 
-class SinkhornKnopp(nn.Module):
+class RMSNorm(nn.Module):
+    """RMSNorm as used in mHC paper."""
+    def __init__(self, dim, eps=1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(dim))
+    
+    def forward(self, x):
+        rms = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + self.eps)
+        return (x / rms) * self.weight
+
+
+def sinkhorn_knopp(M, n_iters=20, eps=1e-8):
     """
     Sinkhorn-Knopp projection onto the doubly stochastic manifold.
+    
+    Paper Equation (9):
+        M^(0) = exp(H̃_l^res)
+        M^(t) = T_r(T_c(M^(t-1)))
     
     A doubly stochastic matrix has all rows and columns summing to 1,
     ensuring signal energy conservation during mixing.
     """
-    def __init__(self, n_iters=20, eps=1e-6):
-        super().__init__()
-        self.n_iters = n_iters
-        self.eps = eps
+    # Ensure positive via exponent (paper Eq. 9)
+    M = torch.exp(M)
     
-    def forward(self, W):
-        """Project W onto doubly stochastic manifold."""
-        # Ensure positive (required for Sinkhorn)
-        W = W.abs() + self.eps
-        
-        # Alternating row/column normalization
-        for _ in range(self.n_iters):
-            # Row normalization
-            W = W / (W.sum(dim=-1, keepdim=True) + self.eps)
-            # Column normalization
-            W = W / (W.sum(dim=-2, keepdim=True) + self.eps)
-        
-        return W
+    # Alternating row/column normalization
+    for _ in range(n_iters):
+        # Row normalization T_r
+        M = M / (M.sum(dim=-1, keepdim=True) + eps)
+        # Column normalization T_c
+        M = M / (M.sum(dim=-2, keepdim=True) + eps)
+    
+    return M
 
 
-class RealMHC(nn.Module):
+class DataDependentMHC(nn.Module):
     """
-    Real mHC module with Sinkhorn-Knopp projection.
+    Data-Dependent mHC Operator following paper Equations (5), (7), (8).
     
-    Implements the transition:
-    X_{l+1} = H_res @ X_l + H_post^T @ F(H_pre @ X_l)
+    KEY INSIGHT: The mixing coefficients are computed FROM THE INPUT,
+    not just static learned parameters!
     
-    Where H_res is projected onto the doubly stochastic manifold.
+    Paper Equation (7):
+        x̃_l' = RMSNorm(vec(x_l))
+        H̃_l^pre = α^pre · (x̃_l' · φ^pre) + b^pre
+        H̃_l^post = α^post · (x̃_l' · φ^post) + b^post  
+        H̃_l^res = α^res · mat(x̃_l' · φ^res) + b^res
+    
+    Paper Equation (8):
+        H_l^pre = σ(H̃_l^pre)
+        H_l^post = 2σ(H̃_l^post)
+        H_l^res = Sinkhorn-Knopp(H̃_l^res)
     """
-    def __init__(self, n_streams=4, n_sinkhorn_iters=20, alpha_init=0.01):
+    def __init__(self, n_streams=4, d_stream=None, n_embd=None, 
+                 n_sinkhorn_iters=20, alpha_init=0.01):
         super().__init__()
         self.n_streams = n_streams
-        self.alpha = alpha_init
+        self.n_sinkhorn_iters = n_sinkhorn_iters
         
-        # Sinkhorn projector
-        self.sinkhorn = SinkhornKnopp(n_iters=n_sinkhorn_iters)
+        # Total dimension
+        if n_embd is not None:
+            self.n_embd = n_embd
+            self.d_stream = n_embd // n_streams
+        else:
+            self.d_stream = d_stream
+            self.n_embd = n_streams * d_stream
         
-        # Learnable base matrices (before projection)
-        # Initialize near identity for stability
-        self.W_res = nn.Parameter(
-            torch.eye(n_streams) + alpha_init * torch.randn(n_streams, n_streams)
-        )
+        # RMSNorm on flattened input (paper Eq. 7)
+        self.rms_norm = RMSNorm(self.n_embd)
         
-        # Pre/post aggregation vectors (1 x n_streams)
-        # These aggregate n streams to 1, and broadcast back
-        self.W_pre = nn.Parameter(torch.ones(1, n_streams) / n_streams)
-        self.W_post = nn.Parameter(torch.ones(1, n_streams) / n_streams)
+        # === Dynamic mapping projections (φ) ===
+        # These compute INPUT-DEPENDENT coefficients
+        # φ^pre: R^{nC} → R^{n}
+        self.phi_pre = nn.Linear(self.n_embd, n_streams, bias=False)
+        # φ^post: R^{nC} → R^{n}
+        self.phi_post = nn.Linear(self.n_embd, n_streams, bias=False)
+        # φ^res: R^{nC} → R^{n²}
+        self.phi_res = nn.Linear(self.n_embd, n_streams * n_streams, bias=False)
+        
+        # === Static biases (b) ===
+        self.b_pre = nn.Parameter(torch.zeros(n_streams))
+        self.b_post = nn.Parameter(torch.zeros(n_streams))
+        self.b_res = nn.Parameter(torch.zeros(n_streams, n_streams))
+        
+        # === Learnable gating factors (α) ===
+        # Initialized small per paper Table 5
+        self.alpha_pre = nn.Parameter(torch.tensor(alpha_init))
+        self.alpha_post = nn.Parameter(torch.tensor(alpha_init))
+        self.alpha_res = nn.Parameter(torch.tensor(alpha_init))
+        
+        # Initialize biases for identity-like behavior
+        self._init_biases()
     
-    def get_H_res(self):
-        """Get the doubly stochastic residual mixing matrix."""
-        return self.sinkhorn(self.W_res)
+    def _init_biases(self):
+        """Initialize biases for near-identity behavior at start."""
+        with torch.no_grad():
+            # H_pre: uniform aggregation → σ(0) = 0.5, so init to give ~1/n
+            self.b_pre.fill_(0.0)
+            # H_post: uniform broadcast → 2σ(0) = 1.0
+            self.b_post.fill_(0.0)
+            # H_res: identity mixing → need to init so Sinkhorn gives ~identity
+            self.b_res.copy_(torch.eye(self.n_streams) * 2.0)
     
-    def forward(self, x_streams):
+    def compute_mappings(self, x_streams):
         """
-        Apply mHC mixing to multi-stream input.
+        Compute data-dependent mHC mappings.
         
         Args:
-            x_streams: (B, S, n_streams, d_stream)
-        
+            x_streams: (B, T, n_streams, d_stream) multi-stream input
+            
         Returns:
-            Mixed streams: (B, S, n_streams, d_stream)
+            H_pre: (B, T, n_streams) aggregation weights
+            H_post: (B, T, n_streams) broadcast weights  
+            H_res: (B, T, n_streams, n_streams) doubly stochastic mixing
         """
-        # Project to doubly stochastic
-        H_res = self.get_H_res()  # (n_streams, n_streams)
+        B, T, n, d = x_streams.shape
         
-        # Apply mixing: einsum for batched matrix multiply on stream dim
-        # H_res @ x_streams (over the n_streams dimension)
-        x_mixed = torch.einsum('ij,...jd->...id', H_res, x_streams)
+        # Flatten to (B, T, nC) for computing mappings
+        x_flat = x_streams.reshape(B, T, -1)  # (B, T, n_embd)
         
-        return x_mixed
+        # Apply RMSNorm (paper Eq. 7: x̃_l' = RMSNorm(x̃_l))
+        x_norm = self.rms_norm(x_flat)  # (B, T, n_embd)
+        
+        # === Compute dynamic + static mappings (paper Eq. 7) ===
+        # H̃ = α · (x̃' · φ) + b
+        
+        H_tilde_pre = self.alpha_pre * self.phi_pre(x_norm) + self.b_pre  # (B, T, n)
+        H_tilde_post = self.alpha_post * self.phi_post(x_norm) + self.b_post  # (B, T, n)
+        H_tilde_res = self.alpha_res * self.phi_res(x_norm).view(B, T, n, n) + self.b_res  # (B, T, n, n)
+        
+        # === Apply constraints (paper Eq. 8) ===
+        H_pre = torch.sigmoid(H_tilde_pre)  # (B, T, n)
+        H_post = 2.0 * torch.sigmoid(H_tilde_post)  # (B, T, n)
+        H_res = sinkhorn_knopp(H_tilde_res, self.n_sinkhorn_iters)  # (B, T, n, n)
+        
+        return H_pre, H_post, H_res
     
-    def aggregate(self, x_streams):
+    def forward(self, x_streams, layer_fn, ln):
         """
-        Aggregate n streams to 1 stream (for function input).
+        Apply full mHC transition (paper Equation 3):
+            x_{l+1} = H_res · x_l + H_post^T · F(H_pre · x_l)
         
         Args:
-            x_streams: (B, S, n_streams, d_stream)
-        
+            x_streams: (B, T, n_streams, d_stream) input
+            layer_fn: The layer function F (attention or MLP)
+            ln: LayerNorm to apply before layer_fn
+            
         Returns:
-            Aggregated: (B, S, d_stream)
+            x_out: (B, T, n_streams, d_stream) output
         """
-        # Normalize pre-weights
-        W_pre_norm = F.softmax(self.W_pre, dim=-1)  # (1, n_streams)
+        B, T, n, d = x_streams.shape
         
-        # Weighted sum over streams
-        aggregated = torch.einsum('ij,...jd->...d', W_pre_norm, x_streams)
+        # Compute data-dependent mappings
+        H_pre, H_post, H_res = self.compute_mappings(x_streams)
         
-        return aggregated
-    
-    def broadcast(self, x_single, original_streams):
-        """
-        Broadcast single stream back to n streams (for function output).
+        # === H_res · x_l (mix streams) ===
+        # (B,T,n,n) @ (B,T,n,d) -> (B,T,n,d)
+        x_mixed = torch.einsum('btij,btjd->btid', H_res, x_streams)
         
-        Args:
-            x_single: (B, S, d_stream)
-            original_streams: (B, S, n_streams, d_stream) for residual
+        # === H_pre · x_l (aggregate for layer function) ===
+        # H_pre: (B, T, n), x_streams: (B, T, n, d)
+        # Weighted sum over streams -> (B, T, d)
+        x_agg = torch.einsum('btn,btnd->btd', H_pre, x_streams)
         
-        Returns:
-            Broadcasted: (B, S, n_streams, d_stream)
-        """
-        # Normalize post-weights
-        W_post_norm = F.softmax(self.W_post, dim=-1)  # (1, n_streams)
+        # Expand aggregated back to full dimension for layer function
+        # The layer function expects (B, T, n_embd)
+        x_agg_full = x_agg.unsqueeze(2).expand(-1, -1, n, -1).reshape(B, T, -1)
         
-        # Broadcast: outer product with weights
-        broadcasted = x_single.unsqueeze(-2) * W_post_norm.unsqueeze(-1)  # (B, S, n_streams, d_stream)
+        # Apply layer function F
+        x_ln = ln(x_agg_full)
+        f_out = layer_fn(x_ln)  # (B, T, n_embd)
+        f_out_streams = f_out.reshape(B, T, n, d)  # (B, T, n, d)
         
-        return broadcasted
+        # === H_post^T · F(...) (broadcast back) ===
+        # H_post: (B, T, n), f_out_streams: (B, T, n, d)
+        # Multiply each stream by its weight
+        x_broadcast = H_post.unsqueeze(-1) * f_out_streams  # (B, T, n, d)
+        
+        # === Final: x_{l+1} = H_res · x_l + H_post^T · F(...) ===
+        x_out = x_mixed + x_broadcast
+        
+        return x_out
 
 
 class LayerNorm(nn.Module):
@@ -201,9 +285,10 @@ class MLP(nn.Module):
 
 class Block(nn.Module):
     """
-    Transformer block with REAL mHC (Sinkhorn-Knopp projected).
+    Transformer block with DATA-DEPENDENT mHC (paper Equations 3, 7, 8).
     
-    Implements multi-stream residual with doubly stochastic mixing.
+    Implements multi-stream residual with doubly stochastic mixing
+    where the mixing coefficients are computed from the input.
     """
     def __init__(self, config):
         super().__init__()
@@ -214,52 +299,45 @@ class Block(nn.Module):
         assert config.n_embd % self.n_streams == 0, \
             f"n_embd ({config.n_embd}) must be divisible by n_streams ({self.n_streams})"
         
+        # Layer norms
         self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
-        self.attn = CausalSelfAttention(config)
         self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
+        
+        # Core layer functions
+        self.attn = CausalSelfAttention(config)
         self.mlp = MLP(config)
         
-        # Real mHC modules
+        # Data-dependent mHC modules
         n_sinkhorn = getattr(config, 'n_sinkhorn_iters', 20)
-        self.mhc_attn = RealMHC(n_streams=self.n_streams, n_sinkhorn_iters=n_sinkhorn)
-        self.mhc_mlp = RealMHC(n_streams=self.n_streams, n_sinkhorn_iters=n_sinkhorn)
+        alpha_init = getattr(config, 'alpha_init', 0.01)
+        
+        self.mhc_attn = DataDependentMHC(
+            n_streams=self.n_streams,
+            n_embd=self.n_embd,
+            n_sinkhorn_iters=n_sinkhorn,
+            alpha_init=alpha_init
+        )
+        self.mhc_mlp = DataDependentMHC(
+            n_streams=self.n_streams,
+            n_embd=self.n_embd,
+            n_sinkhorn_iters=n_sinkhorn,
+            alpha_init=alpha_init
+        )
 
     def forward(self, x):
-        B, S, D = x.shape
+        B, T, D = x.shape
         
-        # --- ATTENTION BLOCK ---
-        # Reshape to streams
-        x_streams = x.reshape(B, S, self.n_streams, self.d_stream)
+        # Reshape to streams: (B, T, D) -> (B, T, n_streams, d_stream)
+        x_streams = x.reshape(B, T, self.n_streams, self.d_stream)
         
-        # Apply mHC residual mixing
-        x_mixed = self.mhc_attn(x_streams)
+        # Attention sub-layer with mHC
+        x_streams = self.mhc_attn(x_streams, self.attn, self.ln_1)
         
-        # Aggregate for attention input
-        x_agg = self.mhc_attn.aggregate(x_mixed)  # (B, S, D) effectively
-        x_flat = x_agg.reshape(B, S, -1)
+        # MLP sub-layer with mHC
+        x_streams = self.mhc_mlp(x_streams, self.mlp, self.ln_2)
         
-        # Pad if needed (aggregate might reduce dimension)
-        if x_flat.shape[-1] < D:
-            x_flat = F.pad(x_flat, (0, D - x_flat.shape[-1]))
-        
-        # Attention
-        x_norm = self.ln_1(x_flat)
-        attn_out = self.attn(x_norm)
-        
-        # Residual with mixed streams
-        x = x_mixed.reshape(B, S, D) + attn_out
-        
-        # --- MLP BLOCK ---
-        x_streams = x.reshape(B, S, self.n_streams, self.d_stream)
-        x_mixed = self.mhc_mlp(x_streams)
-        x_flat = x_mixed.reshape(B, S, D)
-        
-        x_norm = self.ln_2(x_flat)
-        mlp_out = self.mlp(x_norm)
-        
-        x = x_flat + mlp_out
-        
-        return x
+        # Flatten back to (B, T, D)
+        return x_streams.reshape(B, T, D)
 
 
 @dataclass
@@ -273,9 +351,26 @@ class GPTConfig:
     bias: bool = True
     n_streams: int = 4
     n_sinkhorn_iters: int = 20
+    alpha_init: float = 0.01
 
 
 class GPT(nn.Module):
+    """
+    GPT with DATA-DEPENDENT mHC (Manifold-Constrained Hyper-Connections).
+    
+    Accurate implementation following arXiv:2512.24880.
+    
+    Key features:
+    1. DATA-DEPENDENT mappings computed from input (paper Eq. 7)
+    2. Sinkhorn-Knopp projection ensures doubly stochastic H_res
+    3. Sigmoid constraints: H_pre = σ(...), H_post = 2σ(...)
+    
+    Limitations vs E∆-MHC-Geo:
+    - Spectral collapse: eigenvalues |λ| ≤ 1, causes oversmoothing
+    - Not isometric: ||M·x|| ≤ ||x||, signal energy decreases
+    - Iterative: Sinkhorn needs 20 iterations (approximate)
+    - No reflection: cannot achieve det=-1 or eigenvalue λ=-1
+    """
     def __init__(self, config):
         super().__init__()
         assert config.vocab_size is not None
@@ -297,8 +392,11 @@ class GPT(nn.Module):
             if pn.endswith('c_proj.weight'):
                 torch.nn.init.normal_(p, mean=0.0, std=0.02/math.sqrt(2 * config.n_layer))
 
-        print(f"Pure mHC model - number of parameters: {self.get_num_params()/1e6:.2f}M")
-        print(f"  n_streams: {config.n_streams}, sinkhorn_iters: {config.n_sinkhorn_iters}")
+        print(f"Pure mHC model (DATA-DEPENDENT) - parameters: {self.get_num_params()/1e6:.2f}M")
+        print(f"  n_streams: {config.n_streams}")
+        print(f"  Sinkhorn iterations: {config.n_sinkhorn_iters}")
+        print(f"  Alpha init: {config.alpha_init}")
+        print(f"  Mappings: DATA-DEPENDENT (per paper Eq. 7)")
 
     def get_num_params(self, non_embedding=True):
         n_params = sum(p.numel() for p in self.parameters())
