@@ -240,3 +240,131 @@ python run_aha_benchmark.py --dataset pure_flip --few_shot 200 --max_iters 800
 - DDL uses rank-1 perturbation (CAN reflect)
 - Cayley transform produces SO(n) matrices (CANNOT reflect, det=+1 always)
 - These are different operators despite both appearing in geometric literature
+
+---
+
+## Appendix B: Text-Based Reasoning Benchmark (Paper Methodology)
+
+Following the request to redesign the benchmark to match the paper's methodology, we implement a text-based reasoning shift benchmark.
+
+### B.1 Methodology Alignment with Paper
+
+| Paper Section | Our Implementation |
+|---------------|-------------------|
+| **4.1 Cryptic Xwords** | Belief revision problems (misleading word problems) |
+| **4.2 Math** | Step-by-step arithmetic with potential errors |
+| **4.3 Rush Hour** | Sequence continuation (pattern recognition) |
+| **3.1 Shift Detection** | Lexical cue detection (Table 10) |
+| **3.2 Metrics** | P(S), P(✓\|S=1), P(✓\|S=0), shift_benefit |
+
+### B.2 Lexical Cues for Shift Detection (Paper Table 10)
+
+```python
+SHIFT_LEXICAL_CUES = {
+    'reconsideration': ['wait', 'actually', 'hold on', 'let me reconsider'],
+    'negation': ['no,', 'that\'s wrong', 'incorrect', 'mistake'],
+    'revision': ['the correct answer is', 'let me redo', 'correction:'],
+    'backtracking': ['going back', 'starting over', 'from the beginning'],
+}
+```
+
+### B.3 Key Metrics (Paper Section 3)
+
+| Metric | Definition | Paper Finding |
+|--------|------------|---------------|
+| **P(S)** | Shift prevalence | ~6.31% |
+| **P(✓\|S=1)** | Accuracy when shift occurs | 2.57% |
+| **P(✓\|S=0)** | Accuracy when no shift | 16.44% |
+| **Shift Benefit** | P(✓\|S=1) - P(✓\|S=0) | -13.87pp |
+
+**Key Insight:** Negative shift_benefit means shifts are HARMFUL, not helpful.
+
+### B.4 Example Problems
+
+**Arithmetic (Math domain):**
+```
+Calculate: (25 + 15) * 3
+
+First, 25 + 15 = 40
+Then, 40 * 3 = 120
+Answer: 120
+```
+
+**With Correction Shift:**
+```
+Calculate: (25 + 15) * 3
+
+First, 25 + 15 = 40
+Then, 40 * 3 = 130
+Wait, that's wrong. Let me recalculate.
+Then, 40 * 3 = 120
+Answer: 120
+```
+
+**Belief Revision (Cryptic-style):**
+```
+A farmer has 17 sheep. All but 9 run away. How many are left?
+
+The farmer lost some sheep.
+17 - 9 = 8 ran away.
+Actually, "all but 9" means 9 remain.
+Answer: 9
+```
+
+### B.5 Running the Text-Based Benchmark
+
+```bash
+# Generate dataset and run benchmark
+python run_reasoning_benchmark.py --max_iters 1000 --eval_interval 100
+
+# With more training
+python run_reasoning_benchmark.py --max_iters 2000 --n_eval 300
+```
+
+### B.6 Expected Findings
+
+Based on the paper's methodology:
+
+1. **All models should show negative shift_benefit** - This matches the paper's finding that shifts indicate confusion, not insight.
+
+2. **Geometric models may show less negative shift_benefit** - Their architectural ability to perform reflections (det=-1) may help them recover from errors more gracefully.
+
+3. **Lower perplexity ≠ better shift handling** - A model can be fluent but bad at self-correction.
+
+### B.7 Interpretation Guide
+
+| Result Pattern | Interpretation |
+|----------------|----------------|
+| shift_benefit ≈ 0 | Shifts neither help nor hurt |
+| shift_benefit < 0 | Shifts indicate confusion (paper's main finding) |
+| shift_benefit > 0 | Shifts genuinely help (would contradict paper) |
+| geo_benefit > baseline_benefit | Geometric models recover better |
+
+---
+
+## Appendix C: Complete Benchmark Suite
+
+We now have TWO complementary benchmarks:
+
+### Geometric Benchmark (Original)
+- **Files:** `correction_aha.py`, `run_aha_benchmark.py`
+- **Tests:** Architectural reflection capability (v → -v)
+- **Key Metric:** Flip accuracy on seen vs. unseen dimensions
+- **Best For:** Testing geometric inductive bias
+
+### Text-Based Benchmark (Paper Methodology)
+- **Files:** `reasoning_shift.py`, `run_reasoning_benchmark.py`
+- **Tests:** Reasoning shift handling in natural language
+- **Key Metrics:** P(S), P(✓|S=1), P(✓|S=0), shift_benefit
+- **Best For:** Evaluating "Aha!" moment behavior
+
+### Combined Analysis
+
+Both benchmarks test the same underlying capability (belief revision) at different abstraction levels:
+
+| Level | Benchmark | What's Measured |
+|-------|-----------|-----------------|
+| **Geometric** | Vector reflection | Can architecture perform det=-1? |
+| **Semantic** | Text reasoning | Does model improve after reconsidering? |
+
+The geometric benchmark tests necessary conditions (architectural capability), while the text benchmark tests sufficient conditions (useful application).
