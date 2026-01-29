@@ -158,18 +158,18 @@ def create_model(model_name: str, config_override: Dict = None):
         return GPT(config), 'GPT2 (baseline)'
         
     elif model_name == 'ddl':
-        from proposed_model_ddl import DeltaGPT, DeltaGPTConfig
-        config = DeltaGPTConfig(**base_config)
-        return DeltaGPT(config), 'DDL (Deep Delta Learning)'
+        from proposed_model_ddl import GPT as DDLGPT, GPTConfig as DDLConfig
+        config = DDLConfig(**base_config)
+        return DDLGPT(config), 'DDL (Deep Delta Learning)'
         
     elif model_name == 'mhc':
-        from proposed_model_mhc_real import mHCGPT, mHCGPTConfig
-        config = mHCGPTConfig(**base_config)
+        from proposed_model_mhc_real import GPT as mHCGPT, GPTConfig as mHCConfig
+        config = mHCConfig(**base_config)
         return mHCGPT(config), 'mHC (DeepSeek)'
         
     elif model_name == 'proposed':
-        from proposed_model_hybrid import HybridGPT, HybridGPTConfig
-        config = HybridGPTConfig(**base_config)
+        from proposed_model_hybrid import GPT as HybridGPT, GPTConfig as HybridConfig
+        config = HybridConfig(**base_config)
         return HybridGPT(config), 'E∆-MHC-Geo (Proposed)'
     
     else:

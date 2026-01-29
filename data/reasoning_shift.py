@@ -20,6 +20,7 @@ Reference: https://arxiv.org/html/2601.00514v1#S4
 import os
 import random
 import numpy as np
+import torch
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
@@ -521,8 +522,6 @@ def create_tokenized_dataset(
         labels: Target token indices [n_samples, max_length]
         metadata: Problem metadata for analysis
     """
-    import torch
-    
     all_input_ids = []
     all_labels = []
     metadata = []
