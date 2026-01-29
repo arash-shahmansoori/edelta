@@ -1,21 +1,44 @@
 """
 Correction Task Dataset (Aha! Moment Detection)
 
+============================================================================
+Based on: "The Illusion of Insight in Reasoning Models" (arXiv:2601.00514v1)
+============================================================================
+
+Key Findings from the Paper:
+1. Spontaneous reasoning shifts are RARE (~6.31%) and generally HARMFUL
+   - Shifted traces: 2.57% accuracy
+   - Non-shifted traces: 16.44% accuracy
+   
+2. Externally triggered reconsideration HELPS (+8.41pp on Math)
+   - Using cues like "Wait, something is not right..."
+   
+3. Effect is AMPLIFIED under high uncertainty (top 20% entropy: +15.38pp)
+
+4. Formal "Aha!" moments (prior failure + pivot + improvement) are vanishingly rare
+
+============================================================================
 Purpose: Test "Aha!" moment detection — does β spike when the model 
 should "change its mind"?
-
-Inspired by the Illusion of Insight paper (arXiv:2601.00514v1).
 
 Task: Follow instructions with mid-sequence corrections.
 Input:  "Task: Add 5 to X. X=10. Wait, I meant subtract 5. Answer:"
 Output: "5"
 
 The model must:
-1. Initially compute 10+5=15
-2. Recognize "Wait, I meant" as correction signal
-3. Abandon first strategy, compute 10-5=5
+1. Initially compute 10+5=15 (first strategy)
+2. Recognize "Wait, I meant" as correction signal (shift detection)
+3. Abandon first strategy, compute 10-5=5 (correction execution)
 
-We expect β to SPIKE at "Wait" token in E∆-MHC-Geo!
+For E∆-MHC-Geo:
+- β→0 (Householder/reflection) should activate at correction cues
+- β→1 (Cayley/rotation) should maintain during normal reasoning
+
+Correction Cues (from paper whitelist):
+- "Wait, I meant", "Actually, no,", "Scratch that,", "On second thought,"
+- "However, instead", "No wait,", "Sorry, I meant", "Correction:",
+- "Let me rephrase:", "Ignore that,"
+============================================================================
 """
 
 import os

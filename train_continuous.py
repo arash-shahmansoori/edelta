@@ -136,7 +136,8 @@ def get_args():
     
     # Data
     parser.add_argument('--dataset', type=str, default='gyroscope',
-                        choices=['gyroscope', 'correction', 'stability'],
+                        choices=['gyroscope', 'correction', 'stability',
+                                 'correction_insight', 'correction_entropy', 'correction_shift'],
                         help='Dataset to train on')
     parser.add_argument('--data_dir', type=str, default='data')
     
@@ -264,9 +265,20 @@ def load_dataset(dataset_name: str, data_dir: str = 'data') -> dict:
         'val_y': torch.from_numpy(np.load(os.path.join(path, 'val_y.npy'))),
     }
     
+    # Load additional metadata if available (for paper-style analysis)
+    for extra in ['train_entropy', 'train_shift_needed', 'train_scenarios',
+                  'train_uncertainty', 'train_expected_shift', 'metadata']:
+        extra_path = os.path.join(path, f'{extra}.npy')
+        if os.path.exists(extra_path):
+            data[extra] = np.load(extra_path, allow_pickle=True)
+            if extra == 'metadata':
+                data[extra] = data[extra].item()
+    
     print(f"Loaded {dataset_name} dataset:")
     print(f"  Train: {data['train_x'].shape} -> {data['train_y'].shape}")
     print(f"  Val: {data['val_x'].shape} -> {data['val_y'].shape}")
+    if 'metadata' in data:
+        print(f"  Metadata available: {list(data['metadata'].keys())}")
     
     return data
 
@@ -276,16 +288,30 @@ def get_input_dim(dataset_name: str) -> int:
     Get input dimension for each dataset.
     
     Specifications (from comparative study table):
-        - Gyroscope:  16-dim vectors
-        - Correction: 32-dim vectors
-        - Stability:  64-dim vectors
+        - Gyroscope:    16-dim vectors
+        - Correction:   32-dim vectors (original)
+        - Stability:    64-dim vectors
+        
+    New correction datasets (arXiv:2601.00514v1 inspired):
+        - correction_insight:  32-dim (scenario-based correction)
+        - correction_entropy:  32-dim (entropy-stratified)
+        - correction_shift:    32-dim (shift detection)
     """
     dims = {
         'gyroscope': 16,
         'correction': 32,
         'stability': 64,
+        # New correction datasets
+        'correction_insight': 32,
+        'correction_entropy': 32,
+        'correction_shift': 32,
     }
     if dataset_name not in dims:
+        # Try to infer from data files
+        path = f'data/{dataset_name}/train_x.npy'
+        if os.path.exists(path):
+            data = np.load(path)
+            return data.shape[-1]
         raise ValueError(f"Unknown dataset: {dataset_name}. Expected one of {list(dims.keys())}")
     return dims[dataset_name]
 

@@ -1,12 +1,29 @@
 #!/usr/bin/env python3
 """
 Training Script for Ultimate Correction Benchmarks
+
+Includes metrics inspired by:
+"The Illusion of Insight in Reasoning Models" (arXiv:2601.00514v1)
+
+Key insights from the paper:
+- Spontaneous reasoning shifts are rare (~6.31%) and generally harmful
+- Externally triggered reconsideration reliably improves accuracy (+8.41pp)
+- Effect is amplified under high uncertainty (top 20% entropy: +15.38pp)
+
+Tasks (ordered by difficulty):
+1. rotation_reflection - Direct test of Cayley (rotation) vs Householder (reflection)
+2. cumulative - Track flip parity (cumulative correction)
+3. accumulation - Running sum with negation
+4. echo - Long-range memory + conditional correction
+5. isometry - Ultimate isometry preservation test
+6. noise_robust - Correction under noise perturbation
 """
 
 import os
 import math
 import time
 import argparse
+from typing import Dict, Any
 
 import numpy as np
 import torch
@@ -21,7 +38,7 @@ from train_continuous import ContinuousModelWrapper
 
 
 def get_args():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description='Ultimate Correction Benchmarks')
     
     parser.add_argument('--model_type', type=str, default='edelta',
                         choices=['gpt2', 'ddl', 'mhc', 'edelta'])
@@ -57,6 +74,10 @@ def get_args():
     # E∆-MHC-Geo
     parser.add_argument('--gate_reg_weight', type=float, default=0.1)
     parser.add_argument('--init_gate_bias', type=float, default=0.0)
+    
+    # Benchmark mode
+    parser.add_argument('--compare', action='store_true',
+                        help='Run comparison across all model types')
     
     return parser.parse_args()
 
@@ -113,6 +134,77 @@ def estimate_loss(model, data, batch_size, eval_iters, device):
     return out
 
 
+@torch.no_grad()
+def compute_paper_metrics(model, data, device, batch_size=64) -> Dict[str, float]:
+    """
+    Compute metrics inspired by arXiv:2601.00514v1 (Illusion of Insight paper).
+    
+    Metrics:
+    - MSE loss
+    - Cosine similarity (overall and at correction points)
+    - Correction quality (how well model executes belief flips)
+    - Shift detection accuracy (does model recognize correction signals?)
+    """
+    model.eval()
+    
+    val_x = data['val_x'].to(device)
+    val_y = data['val_y'].to(device)
+    
+    all_cos_sim = []
+    correction_quality = []
+    
+    n_batches = min(10, len(val_x) // batch_size)
+    
+    for i in range(n_batches):
+        start = i * batch_size
+        end = start + batch_size
+        x, y = val_x[start:end], val_y[start:end]
+        
+        pred, _ = model(x, y)
+        
+        # Cosine similarity
+        pred_flat = pred.view(-1, pred.size(-1))
+        y_flat = y.view(-1, y.size(-1))
+        pred_norm = F.normalize(pred_flat, dim=-1)
+        y_norm = F.normalize(y_flat, dim=-1)
+        cos_sim = (pred_norm * y_norm).sum(dim=-1)
+        all_cos_sim.extend(cos_sim.cpu().tolist())
+        
+        # Correction quality: measure at positions where target flips
+        for b in range(x.size(0)):
+            for t in range(1, x.size(1)):
+                # Detect flip in target
+                prev_y = y[b, t-1]
+                curr_y = y[b, t]
+                target_cos = F.cosine_similarity(
+                    prev_y.unsqueeze(0), curr_y.unsqueeze(0)
+                ).item()
+                
+                if target_cos < -0.5:  # Target flipped sign
+                    # Check if prediction also flipped correctly
+                    pred_cos = F.cosine_similarity(
+                        pred[b, t].unsqueeze(0), curr_y.unsqueeze(0)
+                    ).item()
+                    correction_quality.append(pred_cos)
+    
+    metrics = {
+        'cosine_sim_mean': np.mean(all_cos_sim),
+        'cosine_sim_std': np.std(all_cos_sim),
+    }
+    
+    if correction_quality:
+        metrics['correction_quality'] = np.mean(correction_quality)
+        metrics['correction_std'] = np.std(correction_quality)
+        metrics['n_corrections'] = len(correction_quality)
+    else:
+        metrics['correction_quality'] = 0.0
+        metrics['correction_std'] = 0.0
+        metrics['n_corrections'] = 0
+    
+    model.train()
+    return metrics
+
+
 def create_model(args, input_dim, block_size):
     """Create model based on model_type."""
     
@@ -151,8 +243,13 @@ def create_model(args, input_dim, block_size):
     return model
 
 
-def train(args):
+def train(args, model_type: str = None, task: str = None) -> Dict[str, Any]:
     """Main training loop."""
+    
+    if model_type:
+        args.model_type = model_type
+    if task:
+        args.task = task
     
     device = args.device
     if device == 'cuda' and not torch.cuda.is_available():
@@ -161,10 +258,14 @@ def train(args):
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
     
-    os.makedirs(args.out_dir, exist_ok=True)
+    out_dir = os.path.join(args.out_dir, f'{args.model_type}_{args.task}')
+    os.makedirs(out_dir, exist_ok=True)
     
     # Load data
-    print(f"\n=== Loading correction_ultimate_{args.task} ===")
+    print(f"\n{'='*60}")
+    print(f"Training {args.model_type.upper()} on {args.task}")
+    print(f"{'='*60}")
+    
     data = load_data(args.task)
     
     input_dim = data['train_x'].shape[-1]
@@ -178,16 +279,14 @@ def train(args):
     model = create_model(args, input_dim, seq_len + 1)
     model = model.to(device)
     
-    print(f"\nModel: {args.model_type}")
-    print(f"Parameters: {model.get_num_params() / 1e6:.2f}M")
+    n_params = model.get_num_params()
+    print(f"Model: {args.model_type} ({n_params / 1e6:.2f}M params)")
     
     # Optimizer
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate,
                                    weight_decay=args.weight_decay, betas=(0.9, 0.95))
     
     # Training
-    print(f"\n=== Training on {args.task} ===")
-    
     warmup_iters = 100
     best_val_loss = float('inf')
     train_log = {'iter': [], 'train_loss': [], 'val_loss': [], 'grad_norm': []}
@@ -214,7 +313,7 @@ def train(args):
                     'iter_num': iter_num,
                     'best_val_loss': best_val_loss,
                 }
-                torch.save(checkpoint, os.path.join(args.out_dir, 'ckpt.pt'))
+                torch.save(checkpoint, os.path.join(out_dir, 'ckpt.pt'))
         
         # Training step
         x, y = get_batch(data, 'train', args.batch_size, device)
@@ -236,11 +335,16 @@ def train(args):
     
     t1 = time.time()
     
-    # Final evaluation
+    # Final evaluation with paper metrics
     final_losses = estimate_loss(model, data, args.batch_size, 100, device)
-    print(f"\n=== Final ({(t1-t0)/60:.1f} min) ===")
-    print(f"Best val loss: {best_val_loss:.4e}")
-    print(f"Final val loss: {final_losses['val']:.4e}")
+    paper_metrics = compute_paper_metrics(model, data, device)
+    
+    print(f"\n{'='*40}")
+    print(f"Results ({args.model_type} on {args.task}):")
+    print(f"  Best val loss: {best_val_loss:.4e}")
+    print(f"  Cosine similarity: {paper_metrics['cosine_sim_mean']:.4f} ± {paper_metrics['cosine_sim_std']:.4f}")
+    print(f"  Correction quality: {paper_metrics['correction_quality']:.4f}")
+    print(f"  Training time: {(t1-t0)/60:.1f} min")
     
     # Save
     results = {
@@ -249,14 +353,77 @@ def train(args):
         'best_val_loss': best_val_loss,
         'final_val_loss': final_losses['val'],
         'final_train_loss': final_losses['train'],
+        'paper_metrics': paper_metrics,
         'training_time': t1 - t0,
+        'n_params': n_params,
     }
-    np.save(os.path.join(args.out_dir, 'results.npy'), results)
-    np.save(os.path.join(args.out_dir, 'train_log.npy'), train_log)
+    np.save(os.path.join(out_dir, 'results.npy'), results)
+    np.save(os.path.join(out_dir, 'train_log.npy'), train_log)
     
     return results
 
 
+def run_comparison(args) -> Dict[str, Dict]:
+    """Run comparison across all model types on a single task."""
+    
+    model_types = ['gpt2', 'ddl', 'mhc', 'edelta']
+    all_results = {}
+    
+    print("\n" + "=" * 70)
+    print(f"COMPARISON BENCHMARK: {args.task}")
+    print("Metrics inspired by arXiv:2601.00514v1 (Illusion of Insight)")
+    print("=" * 70)
+    
+    for model_type in model_types:
+        results = train(args, model_type=model_type)
+        all_results[model_type] = results
+    
+    # Print comparison table
+    print("\n" + "=" * 70)
+    print("COMPARISON RESULTS")
+    print("=" * 70)
+    print(f"\n{'Model':<12} {'Val Loss':<12} {'Cos Sim':<12} {'Correction':<12} {'Time':<8}")
+    print("-" * 60)
+    
+    for model_type, results in all_results.items():
+        pm = results['paper_metrics']
+        print(f"{model_type:<12} {results['best_val_loss']:.4e}  "
+              f"{pm['cosine_sim_mean']:.4f}       {pm['correction_quality']:.4f}       "
+              f"{results['training_time']/60:.1f}m")
+    
+    # Relative improvements vs baseline
+    baseline = all_results['gpt2']
+    print(f"\n{'='*60}")
+    print("Relative Improvement vs GPT2 Baseline:")
+    print("-" * 60)
+    
+    for model_type in ['ddl', 'mhc', 'edelta']:
+        results = all_results[model_type]
+        loss_delta = (baseline['best_val_loss'] - results['best_val_loss']) / baseline['best_val_loss'] * 100
+        cos_delta = (results['paper_metrics']['cosine_sim_mean'] - 
+                    baseline['paper_metrics']['cosine_sim_mean']) * 100
+        corr_delta = (results['paper_metrics']['correction_quality'] - 
+                     baseline['paper_metrics']['correction_quality']) * 100
+        
+        print(f"{model_type:<12} Loss: {loss_delta:+.1f}%  CosSim: {cos_delta:+.2f}pp  Correction: {corr_delta:+.2f}pp")
+    
+    # Save comparison
+    np.save(os.path.join(args.out_dir, f'comparison_{args.task}.npy'), all_results)
+    
+    return all_results
+
+
 if __name__ == '__main__':
     args = get_args()
-    train(args)
+    
+    # Generate dataset if needed
+    task_file = f'data/correction_ultimate_{args.task}.npz'
+    if not os.path.exists(task_file):
+        print(f"Generating {args.task} dataset...")
+        import subprocess
+        subprocess.run(['python', 'data/correction_ultimate.py'])
+    
+    if args.compare:
+        run_comparison(args)
+    else:
+        train(args)
