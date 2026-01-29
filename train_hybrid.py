@@ -248,6 +248,11 @@ while True:
             model.require_backward_grad_sync = (micro_step == gradient_accumulation_steps - 1)
         with ctx:
             logits, loss = model(X, Y)
+            # Add midpoint collapse regularization (RESEARCH_V3.md Section 6.3)
+            # Forces gate to be binary (0 or 1), avoiding non-orthogonal interpolation
+            if hasattr(model, 'get_gate_regularization_loss'):
+                gate_reg_loss = model.get_gate_regularization_loss()
+                loss = loss + gate_reg_loss
             loss = loss / gradient_accumulation_steps
         X, Y = get_batch('train')
         scaler.scale(loss).backward()
