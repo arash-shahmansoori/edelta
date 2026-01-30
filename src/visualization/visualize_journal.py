@@ -12,6 +12,12 @@ Design principles:
 """
 
 import os
+import sys
+from pathlib import Path
+
+# Add project root to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -63,19 +69,13 @@ LINE_STYLES = {
     'E∆-MHC-Geo': '-',
 }
 
-# Data directories
+# Data directories (gyroscope and stability only - correction handled separately in experiments/)
 GRADNORM_DIRS = {
     'gyroscope': {
         'GPT': 'out-gradnorm/gyroscope-baseline',
         'DDL': 'out-gradnorm/gyroscope-ddl',
         'mHC': 'out-gradnorm/gyroscope-mhc',
         'E∆-MHC-Geo': 'out-gradnorm/gyroscope-proposed',
-    },
-    'correction': {
-        'GPT': 'out-gradnorm/correction-baseline',
-        'DDL': 'out-gradnorm/correction-ddl',
-        'mHC': 'out-gradnorm/correction-mhc',
-        'E∆-MHC-Geo': 'out-gradnorm/correction-proposed',
     },
     'stability': {
         'GPT': 'out-gradnorm/stability-baseline',
@@ -112,11 +112,10 @@ def create_figure_1_training_dynamics():
     - Row 1: Validation Loss vs Steps (3 datasets)
     - Row 2: Gradient Norm vs Steps (3 datasets)
     """
-    fig, axes = plt.subplots(2, 3, figsize=(14, 8))
+    fig, axes = plt.subplots(2, 2, figsize=(10, 8))
     
-    datasets = ['gyroscope', 'correction', 'stability']
+    datasets = ['gyroscope', 'stability']
     dataset_titles = ['Gyroscope\n(Manifold Precision)', 
-                     'Correction\n(Topological Completeness)', 
                      'Stability\n(Unconditional Isometry)']
     
     model_order = ['GPT', 'DDL', 'mHC', 'E∆-MHC-Geo']
@@ -185,9 +184,9 @@ def create_figure_1_training_dynamics():
     fig.suptitle('Training Dynamics: Loss and Gradient Norm Evolution', 
                 fontsize=14, fontweight='bold')
     
-    plt.savefig('journal_fig1_training.png', dpi=300, bbox_inches='tight', 
+    plt.savefig('results/journal_fig1_training.png', dpi=300, bbox_inches='tight', 
                 facecolor='white', edgecolor='none')
-    print("Saved: journal_fig1_training.png")
+    print("Saved: results/journal_fig1_training.png")
     plt.close()
 
 
@@ -199,11 +198,11 @@ def create_figure_2_stability_analysis():
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
-    from train_continuous import ContinuousModelWrapper
-    from model import GPT as BaselineGPT, GPTConfig as BaselineConfig
-    from proposed_model_ddl import GPT as DDLGPT, GPTConfig as DDLConfig
-    from proposed_model_mhc_real import GPT as mHCGPT, GPTConfig as mHCConfig
-    from proposed_model_hybrid import GPT as EdeltaGPT, GPTConfig as EdeltaConfig
+    from src.training.train_continuous import ContinuousModelWrapper
+    from src.models.baseline_gpt import GPT as BaselineGPT, GPTConfig as BaselineConfig
+    from src.models.ddl import GPT as DDLGPT, GPTConfig as DDLConfig
+    from src.models.mhc import GPT as mHCGPT, GPTConfig as mHCConfig
+    from src.models.edelta_hybrid import GPT as EdeltaGPT, GPTConfig as EdeltaConfig
     
     results = {}
     model_order = ['GPT', 'DDL', 'mHC', 'E∆-MHC-Geo']
@@ -354,9 +353,9 @@ def create_figure_2_stability_analysis():
     fig.suptitle('Stability Analysis: Norm Preservation Test', 
                 fontsize=14, fontweight='bold', y=1.02)
     plt.tight_layout()
-    plt.savefig('journal_fig2_stability.png', dpi=300, bbox_inches='tight', 
+    plt.savefig('results/journal_fig2_stability.png', dpi=300, bbox_inches='tight', 
                 facecolor='white', edgecolor='none')
-    print("Saved: journal_fig2_stability.png")
+    print("Saved: results/journal_fig2_stability.png")
     plt.close()
 
 
@@ -364,10 +363,10 @@ def create_figure_3_ablation():
     """
     Figure 3: Model Comparison (GPT, DDL, mHC, Ours)
     """
-    fig, axes = plt.subplots(1, 3, figsize=(13, 4))
+    fig, axes = plt.subplots(1, 2, figsize=(9, 4))
     
-    datasets = ['gyroscope', 'correction', 'stability']
-    dataset_titles = ['(a) Gyroscope', '(b) Correction', '(c) Stability']
+    datasets = ['gyroscope', 'stability']
+    dataset_titles = ['(a) Gyroscope', '(b) Stability']
     
     all_results = {d: {} for d in datasets}
     
@@ -411,9 +410,9 @@ def create_figure_3_ablation():
     
     fig.suptitle('Final Performance Comparison', fontsize=14, fontweight='bold', y=1.0)
     plt.tight_layout()
-    plt.savefig('journal_fig3_ablation.png', dpi=300, bbox_inches='tight', 
+    plt.savefig('results/journal_fig3_ablation.png', dpi=300, bbox_inches='tight', 
                 facecolor='white', edgecolor='none')
-    print("Saved: journal_fig3_ablation.png")
+    print("Saved: results/journal_fig3_ablation.png")
     plt.close()
 
 
@@ -421,12 +420,12 @@ def create_figure_4_comprehensive():
     """
     Figure 4: Comprehensive Summary (Main Figure)
     """
-    fig = plt.figure(figsize=(14, 11))
-    gs = gridspec.GridSpec(3, 3, figure=fig, hspace=0.4, wspace=0.3,
+    fig = plt.figure(figsize=(10, 11))
+    gs = gridspec.GridSpec(3, 2, figure=fig, hspace=0.4, wspace=0.3,
                           height_ratios=[1, 1, 0.9])
     
-    datasets = ['gyroscope', 'correction', 'stability']
-    dataset_short = ['Gyroscope', 'Correction', 'Stability']
+    datasets = ['gyroscope', 'stability']
+    dataset_short = ['Gyroscope', 'Stability']
     model_order = ['GPT', 'DDL', 'mHC', 'E∆-MHC-Geo']
     
     # Row 1: Loss Curves
@@ -516,9 +515,9 @@ def create_figure_4_comprehensive():
     fig.suptitle('E∆-MHC-Geo: Comprehensive Experimental Analysis', 
                 fontsize=14, fontweight='bold', y=0.98)
     
-    plt.savefig('journal_fig4_comprehensive.png', dpi=300, bbox_inches='tight', 
+    plt.savefig('results/journal_fig4_comprehensive.png', dpi=300, bbox_inches='tight', 
                 facecolor='white', edgecolor='none')
-    print("Saved: journal_fig4_comprehensive.png")
+    print("Saved: results/journal_fig4_comprehensive.png")
     plt.close()
 
 

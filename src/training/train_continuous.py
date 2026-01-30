@@ -4,29 +4,29 @@ Training Script for Continuous Physics Benchmarks
 This script trains and evaluates different transformer architectures on the
 "Kill-Shot" benchmark datasets designed to expose specific failure modes.
 
-Usage:
+Usage (run from project root with uv):
     # Train baseline GPT on Gyroscope
-    python train_continuous.py --model_type gpt2 --dataset gyroscope --out_dir out-baseline
+    uv run src/training/train_continuous.py --model_type gpt2 --dataset gyroscope --out_dir out-baseline
     
     # Train DDL on Gyroscope  
-    python train_continuous.py --model_type ddl --dataset gyroscope --out_dir out-ddl
+    uv run src/training/train_continuous.py --model_type ddl --dataset gyroscope --out_dir out-ddl
     
     # Train mHC on Gyroscope
-    python train_continuous.py --model_type mhc --dataset gyroscope --out_dir out-mhc
+    uv run src/training/train_continuous.py --model_type mhc --dataset gyroscope --out_dir out-mhc
     
     # Train E∆-MHC-Geo on Gyroscope
-    python train_continuous.py --model_type edelta --dataset gyroscope --out_dir out-proposed
+    uv run src/training/train_continuous.py --model_type edelta --dataset gyroscope --out_dir out-proposed
 
 Datasets:
     - gyroscope: Continuous rotation prediction (tests manifold precision)
     - correction: Belief flip / negation (tests topological completeness)
     - stability: Long-horizon identity (tests unconditional isometry)
 
-Models (using existing implementations):
-    - gpt2: model.py (Standard GPT baseline)
-    - ddl: proposed_model_ddl.py (Deep Delta Learning)
-    - mhc: proposed_model_mhc_real.py (DeepSeek mHC with Sinkhorn)
-    - edelta: proposed_model_hybrid.py (E∆-MHC-Geo Hybrid)
+Models (from src/models/):
+    - gpt2: baseline_gpt.py (Standard GPT baseline)
+    - ddl: ddl.py (Deep Delta Learning)
+    - mhc: mhc.py (DeepSeek mHC with Sinkhorn)
+    - edelta: edelta_hybrid.py (E∆-MHC-Geo Hybrid)
 """
 
 import os
@@ -41,11 +41,16 @@ import torch
 import torch.nn as nn
 from torch.nn import functional as F
 
-# Import existing models from the repo
-from model import GPT as BaselineGPT, GPTConfig as BaselineConfig
-from proposed_model_ddl import GPT as DDLGPT, GPTConfig as DDLConfig
-from proposed_model_mhc_real import GPT as mHCGPT, GPTConfig as mHCConfig
-from proposed_model_hybrid import GPT as EdeltaGPT, GPTConfig as EdeltaConfig
+# Add project root to path for imports
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
+# Import existing models from src/models
+from src.models.baseline_gpt import GPT as BaselineGPT, GPTConfig as BaselineConfig
+from src.models.ddl import GPT as DDLGPT, GPTConfig as DDLConfig
+from src.models.mhc import GPT as mHCGPT, GPTConfig as mHCConfig
+from src.models.edelta_hybrid import GPT as EdeltaGPT, GPTConfig as EdeltaConfig
 
 
 class ContinuousModelWrapper(nn.Module):

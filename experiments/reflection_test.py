@@ -28,7 +28,8 @@ import torch.nn.functional as F
 sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure') else None
 os.environ['PYTHONUNBUFFERED'] = '1'
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def flush_print(*args, **kwargs):
