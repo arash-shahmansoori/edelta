@@ -1,14 +1,14 @@
 """
 Data Preparation Modules
 
-This module contains dataset preparation scripts for the three main benchmarks:
+This module contains dataset preparation scripts for the benchmarks:
 - gyroscope: Continuous rotation prediction (manifold precision test)
-- correction: Belief correction / Aha! moment detection
 - stability: Norm preservation over long sequences (isometry test)
+- reflection: Pure negation task y = -x (direct geometric operator test)
 """
 
 from . import gyroscope
-from . import correction
 from . import stability
+from . import reflection
 
-__all__ = ['gyroscope', 'correction', 'stability']
+__all__ = ['gyroscope', 'stability', 'reflection']

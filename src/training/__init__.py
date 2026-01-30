@@ -1,7 +1,8 @@
 """
 Training Scripts
 
-- train_continuous: Training for continuous physics benchmarks (gyroscope, correction, stability)
+- train_continuous: Training for continuous physics benchmarks (gyroscope, stability)
+- train_reflection: Direct reflection test (y = -x) for geometric operators
 - train_language_model: Original GPT language model training script
 """
 

@@ -23,24 +23,25 @@ edelta/
 │   │   ├── mhc.py              # DeepSeek mHC (arXiv:2512.24880)
 │   │   └── edelta_hybrid.py    # E∆-MHC-Geo (proposed model)
 │   ├── training/               # Training scripts
-│   │   ├── train_continuous.py # Continuous physics benchmarks
+│   │   ├── train_continuous.py # Continuous physics benchmarks (gyroscope, stability)
+│   │   ├── train_reflection.py # Direct reflection test (y = -x)
 │   │   └── train_language_model.py
 │   ├── data/                   # Data preparation scripts
 │   │   ├── gyroscope.py        # Manifold precision test
-│   │   ├── correction.py       # Topological completeness test
-│   │   └── stability.py        # Isometry test
+│   │   ├── stability.py        # Isometry test
+│   │   └── reflection.py       # Pure negation task
 │   └── visualization/          # Publication figure generation
 │       └── visualize_journal.py
-├── experiments/                # Experiment scripts
-│   └── reflection_test.py      # Direct reflection capability test
 ├── data/                       # Generated datasets
 │   ├── gyroscope/
-│   ├── correction/
 │   └── stability/
 ├── results/                    # Generated figures
 │   ├── journal_fig1_training.png
 │   ├── journal_fig2_stability.png
-│   └── journal_fig3_ablation.png
+│   ├── journal_fig3_ablation.png
+│   ├── reflection_sample_efficiency.png
+│   ├── reflection_parameter_analysis.png
+│   └── reflection_comprehensive.png
 ├── docs/                       # Documentation
 │   ├── RESEARCH_V3.md          # Full theoretical foundation
 │   └── ...
@@ -67,11 +68,11 @@ uv sync
 # Generate gyroscope dataset (rotation manifold test)
 uv run src/data/gyroscope.py
 
-# Generate correction dataset (belief flip test)
-uv run src/data/correction.py
-
 # Generate stability dataset (norm preservation test)
 uv run src/data/stability.py
+
+# Generate reflection dataset (pure negation task - optional, generated on-the-fly)
+uv run src/data/reflection.py
 ```
 
 ### 2. Train Models
@@ -90,24 +91,23 @@ uv run src/training/train_continuous.py --model_type ddl --dataset gyroscope --o
 uv run src/training/train_continuous.py --model_type mhc --dataset gyroscope --out_dir out-mhc
 ```
 
-**Training on different datasets:**
+**Training on stability dataset:**
 
 ```bash
-# Correction task (belief flip / negation)
-uv run src/training/train_continuous.py --model_type edelta --dataset correction --out_dir out-correction
-
 # Stability task (norm preservation)
 uv run src/training/train_continuous.py --model_type edelta --dataset stability --out_dir out-stability
 ```
 
 ### 3. Run Reflection Test
 
+The reflection test directly measures geometric operator capabilities by learning pure negation (y = -x).
+
 ```bash
-# Test direct reflection capability (geometric inductive bias)
-uv run experiments/reflection_test.py --mode sample_efficiency
+# Run sample efficiency test (tests with 10, 25, 50, 100, 200 samples)
+uv run src/training/train_reflection.py --mode sample_efficiency --save_figures
 
 # Single test with specific parameters
-uv run experiments/reflection_test.py --mode single --n_samples 100 --max_iters 1000
+uv run src/training/train_reflection.py --mode single --n_samples 100 --max_iters 1000
 ```
 
 ### 4. Generate Figures
@@ -132,7 +132,19 @@ See `results/` for the publication figures:
 |--------|-------------|
 | `journal_fig1_training.png` | Training dynamics: loss and gradient norm evolution |
 | `journal_fig2_stability.png` | Stability analysis: norm preservation test |
-| `journal_fig3_ablation.png` | Final performance comparison across datasets |
+| `journal_fig3_ablation.png` | Final performance comparison (Gyroscope, Stability) |
+| `reflection_sample_efficiency.png` | Sample efficiency for learning y = -x |
+| `reflection_parameter_analysis.png` | DDL β and E∆-MHC-Geo gate convergence |
+| `reflection_comprehensive.png` | Comprehensive reflection experiment summary |
+
+### Benchmark Results
+
+| Dataset | GPT | DDL | mHC | E∆-MHC-Geo |
+|---------|-----|-----|-----|------------|
+| **Gyroscope** | 3.67e-3 | 3.24e-3 | 4.08e-3 | **5.69e-4** |
+| **Stability** | 1.2e-5 | 1.1e-5 | 9.76e-3 | **3e-6** |
+
+E∆-MHC-Geo achieves **6.5x lower loss** on gyroscope and **4x lower loss** on stability compared to GPT baseline.
 
 ## Model Comparison
 
