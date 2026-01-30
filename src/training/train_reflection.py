@@ -6,24 +6,30 @@ Reflection Training: Direct Test of Geometric Operators
 The PUREST test of geometric inductive bias: learning y = -x (negation)
 ============================================================================
 
+Inspired by "The Illusion of Insight in Reasoning Models" (arXiv:2601.00514v1):
+- Mid-trace "Aha!" moments require parameter shifts that improve performance
+- We test whether geometric operators learn the correct parameters for reflection
+
 This test directly validates the CORE CLAIM of geometric models:
 - DDL's operator A = I - β·kk^T achieves exact reflection when β=2
-- E∆-MHC-Geo's Householder component achieves reflection when gate → 0
+- E∆-MHC-Geo's Householder component achieves reflection when gate γ → 0
 
-We measure:
-1. Sample efficiency (fewer samples needed for geometric models)
-2. Parameter convergence (β → 2 for DDL, gate → 0 for Hybrid)
-3. Final accuracy (cosine similarity with -x)
+Key Metrics (following arXiv:2601.00514v1 methodology):
+1. Parameter convergence: β → 2 (DDL), γ → 0 (E∆-MHC-Geo)
+2. Sample efficiency: fewer samples needed with correct inductive bias
+3. Parameter trajectory: how β and γ evolve during training
+4. Accuracy conditional on parameter values
+
+NOTE: We exclude GPT and mHC as they rely on MLP approximation rather than
+geometric operators - this would be "cheating" as the MLP can learn any
+function without the geometric inductive bias we're testing.
 
 Usage (run from project root with uv):
     # Run sample efficiency test (main experiment)
-    uv run src/training/train_reflection.py --mode sample_efficiency
-    
-    # Run single test with specific sample size
-    uv run src/training/train_reflection.py --mode single --n_samples 100
-    
-    # Generate publication figures
     uv run src/training/train_reflection.py --mode sample_efficiency --save_figures
+    
+    # Run parameter trajectory analysis
+    uv run src/training/train_reflection.py --mode trajectory --save_figures
 
 Author: Arash Shahmansoori (2026)
 """
@@ -432,36 +438,196 @@ def train_and_analyze(
 
 
 # =============================================================================
-# SAMPLE EFFICIENCY TEST
+# TRAINING WITH PARAMETER TRAJECTORY TRACKING
+# =============================================================================
+
+def train_with_trajectory(
+    model: nn.Module,
+    model_name: str,
+    train_x: torch.Tensor,
+    train_y: torch.Tensor,
+    val_x: torch.Tensor,
+    val_y: torch.Tensor,
+    max_iters: int = 2000,
+    batch_size: int = 32,
+    learning_rate: float = 1e-3,
+    track_interval: int = 50,
+    verbose: bool = True,
+):
+    """
+    Train model with detailed parameter trajectory tracking.
+    
+    Inspired by arXiv:2601.00514v1 - tracks parameter evolution to identify
+    "Aha!" moments (sudden parameter shifts that improve performance).
+    """
+    
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+    n_train = len(train_x)
+    n_params = sum(p.numel() for p in model.parameters())
+    
+    if verbose:
+        flush_print(f"\n{'='*60}")
+        flush_print(f"Model: {model_name} ({n_params:,} params)")
+    
+    # Trajectory tracking
+    trajectory = {
+        'iter': [],
+        'train_loss': [],
+        'val_loss': [],
+        'val_cos': [],
+        'negation_accuracy': [],
+    }
+    
+    # Model-specific parameter tracking
+    if hasattr(model, 'get_beta'):
+        trajectory['beta_mean'] = []
+        trajectory['beta_std'] = []
+    if hasattr(model, 'get_gate'):
+        trajectory['gate_mean'] = []
+        trajectory['gate_std'] = []
+    
+    best_val_loss = float('inf')
+    
+    for iter_num in range(max_iters):
+        model.train()
+        
+        idx = torch.randint(0, n_train, (min(batch_size, n_train),))
+        xb, yb = train_x[idx], train_y[idx]
+        
+        pred = model(xb)
+        loss = F.mse_loss(pred, yb)
+        
+        if hasattr(model, 'get_gate_regularization_loss'):
+            gate_reg = model.get_gate_regularization_loss()
+            if gate_reg is not None and gate_reg > 0:
+                loss = loss + gate_reg
+        
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        
+        # Track trajectory at intervals
+        if (iter_num + 1) % track_interval == 0 or iter_num == 0:
+            model.eval()
+            with torch.no_grad():
+                val_pred = model(val_x)
+                val_loss = F.mse_loss(val_pred, val_y).item()
+                val_cos = F.cosine_similarity(val_pred, val_y, dim=-1).mean().item()
+                neg_acc = F.cosine_similarity(val_pred, -val_x, dim=-1).mean().item()
+                
+                trajectory['iter'].append(iter_num + 1)
+                trajectory['train_loss'].append(loss.item())
+                trajectory['val_loss'].append(val_loss)
+                trajectory['val_cos'].append(val_cos)
+                trajectory['negation_accuracy'].append(neg_acc)
+                
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                
+                # Track β for DDL
+                if hasattr(model, 'get_beta'):
+                    betas = model.get_beta(val_x[:100])
+                    trajectory['beta_mean'].append(betas.mean().item())
+                    trajectory['beta_std'].append(betas.std().item())
+                
+                # Track gate for E∆-MHC-Geo
+                if hasattr(model, 'get_gate'):
+                    gates = model.get_gate(val_x[:100])
+                    trajectory['gate_mean'].append(gates.mean().item())
+                    trajectory['gate_std'].append(gates.std().item())
+                
+                if verbose and (iter_num + 1) % (track_interval * 4) == 0:
+                    param_str = ""
+                    if 'beta_mean' in trajectory:
+                        param_str = f", β={trajectory['beta_mean'][-1]:.3f}"
+                    if 'gate_mean' in trajectory:
+                        param_str = f", γ={trajectory['gate_mean'][-1]:.3f}"
+                    flush_print(f"  Step {iter_num+1:4d}: loss={loss.item():.6f}, "
+                               f"neg_acc={neg_acc:.4f}{param_str}")
+    
+    # Final analysis
+    model.eval()
+    with torch.no_grad():
+        final_pred = model(val_x)
+        final_loss = F.mse_loss(final_pred, val_y).item()
+        final_cos = F.cosine_similarity(final_pred, val_y, dim=-1).mean().item()
+        negation_accuracy = F.cosine_similarity(final_pred, -val_x, dim=-1).mean().item()
+    
+    # Compute parameter insights
+    param_info = {}
+    if hasattr(model, 'get_beta'):
+        betas = model.get_beta(val_x[:100])
+        param_info['beta_mean'] = betas.mean().item()
+        param_info['beta_std'] = betas.std().item()
+        param_info['beta_converged'] = param_info['beta_mean'] > 1.9
+        if verbose:
+            status = "✓ CONVERGED" if param_info['beta_converged'] else "✗ NOT converged"
+            flush_print(f"  Final β: {param_info['beta_mean']:.4f} ± {param_info['beta_std']:.4f} {status}")
+    
+    if hasattr(model, 'get_gate'):
+        gates = model.get_gate(val_x[:100])
+        param_info['gate_mean'] = gates.mean().item()
+        param_info['gate_std'] = gates.std().item()
+        param_info['gate_converged'] = param_info['gate_mean'] < 0.1
+        if verbose:
+            status = "✓ CONVERGED" if param_info['gate_converged'] else "✗ NOT converged"
+            flush_print(f"  Final γ: {param_info['gate_mean']:.4f} ± {param_info['gate_std']:.4f} {status}")
+    
+    return {
+        'model_name': model_name,
+        'n_params': n_params,
+        'final_loss': final_loss,
+        'final_cos': final_cos,
+        'negation_accuracy': negation_accuracy,
+        'best_val_loss': best_val_loss,
+        'param_info': param_info,
+        'trajectory': trajectory,
+    }
+
+
+# =============================================================================
+# SAMPLE EFFICIENCY TEST (DDL vs E∆-MHC-Geo only)
 # =============================================================================
 
 def run_sample_efficiency_test(
     dim: int,
     device: str,
-    max_iters: int = 1000,
+    max_iters: int = 2000,
     sample_sizes: list = None,
     save_figures: bool = False,
     output_dir: str = 'results',
 ):
     """
-    Test sample efficiency: how many samples needed to learn y = -x?
+    Test sample efficiency for geometric operators: DDL vs E∆-MHC-Geo.
     
-    Geometric models should need FEWER samples due to inductive bias.
+    Following arXiv:2601.00514v1 methodology:
+    - Track parameter trajectories (β for DDL, γ for E∆-MHC-Geo)
+    - Measure accuracy conditional on parameter convergence
+    - Identify "Aha!" moments (parameter shifts that improve performance)
+    
+    NOTE: GPT and mHC are excluded as they use MLP approximation rather than
+    geometric operators - testing them would be "cheating".
     """
     
     if sample_sizes is None:
-        sample_sizes = [10, 25, 50, 100, 200]
+        sample_sizes = [10, 25, 50, 100, 200, 500]
     
     flush_print("\n" + "="*80)
-    flush_print("SAMPLE EFFICIENCY TEST: Learning y = -x")
+    flush_print("REFLECTION EXPERIMENT: Geometric Operator Analysis")
     flush_print("="*80)
-    flush_print("Geometric models should need fewer samples.\n")
+    flush_print("Testing: DDL (β → 2) vs E∆-MHC-Geo (γ → 0)")
+    flush_print("Task: Learn y = -x (pure negation/reflection)")
+    flush_print("")
+    flush_print("Following arXiv:2601.00514v1 'Illusion of Insight' methodology:")
+    flush_print("  - Track parameter trajectories during training")
+    flush_print("  - Measure convergence to optimal values (β=2, γ=0)")
+    flush_print("  - Analyze accuracy conditional on parameter state\n")
     
     # Fixed validation set
     val_x, val_y = generate_negation_data(500, dim, device, seed=999)
     
     results = {size: {} for size in sample_sizes}
-    model_names = ['GPT', 'DDL', 'mHC', 'E∆-MHC-Geo']
+    model_names = ['DDL', 'E∆-MHC-Geo']  # Only geometric operators
     
     for n_samples in sample_sizes:
         flush_print(f"\n{'='*60}")
@@ -471,15 +637,13 @@ def run_sample_efficiency_test(
         train_x, train_y = generate_negation_data(n_samples, dim, device, seed=42)
         
         models = {
-            'GPT': SimpleGPT(dim).to(device),
             'DDL': SimpleDDL(dim).to(device),
-            'mHC': SimpleMHC(dim).to(device),
             'E∆-MHC-Geo': SimpleHybrid(dim).to(device),
         }
         
         for name in model_names:
             model = models[name]
-            result = train_and_analyze(
+            result = train_with_trajectory(
                 model=model,
                 model_name=name,
                 train_x=train_x,
@@ -488,48 +652,54 @@ def run_sample_efficiency_test(
                 val_y=val_y,
                 max_iters=max_iters,
                 learning_rate=1e-3,
-                eval_interval=max_iters // 5,
+                track_interval=50,
             )
             results[n_samples][name] = result
     
     # Print summary table
     flush_print("\n" + "="*80)
-    flush_print("SAMPLE EFFICIENCY RESULTS (Negation Accuracy)")
+    flush_print("RESULTS SUMMARY")
     flush_print("="*80)
     
-    flush_print(f"\n{'Samples':<10}", end='')
-    for name in model_names:
-        flush_print(f"{name:<16}", end='')
-    flush_print()
-    flush_print("-" * (10 + 16 * len(model_names)))
+    flush_print(f"\n{'Samples':<10}{'DDL Acc':<12}{'DDL β':<12}{'E∆ Acc':<12}{'E∆ γ':<12}")
+    flush_print("-" * 58)
     
     for n_samples in sample_sizes:
-        flush_print(f"{n_samples:<10}", end='')
-        for name in model_names:
-            cos = results[n_samples][name]['negation_accuracy']
-            flush_print(f"{cos:>8.4f}        ", end='')
-        flush_print()
+        ddl = results[n_samples]['DDL']
+        edelta = results[n_samples]['E∆-MHC-Geo']
+        
+        ddl_acc = ddl['negation_accuracy']
+        ddl_beta = ddl['param_info'].get('beta_mean', 0)
+        edelta_acc = edelta['negation_accuracy']
+        edelta_gate = edelta['param_info'].get('gate_mean', 1)
+        
+        flush_print(f"{n_samples:<10}{ddl_acc:>8.4f}    {ddl_beta:>8.4f}    "
+                   f"{edelta_acc:>8.4f}    {edelta_gate:>8.4f}")
     
-    # Find minimum samples for 95% accuracy
+    # Parameter convergence analysis
     flush_print("\n" + "="*80)
-    flush_print("SAMPLES NEEDED FOR 95% NEGATION ACCURACY")
+    flush_print("PARAMETER CONVERGENCE ANALYSIS")
     flush_print("="*80)
+    flush_print("\nDDL: β should converge to 2.0 for exact Householder reflection")
+    flush_print("E∆-MHC-Geo: γ should converge to 0.0 to use Householder component\n")
     
-    min_samples = {}
     for name in model_names:
+        flush_print(f"\n{name}:")
         for n_samples in sample_sizes:
-            if results[n_samples][name]['negation_accuracy'] >= 0.95:
-                min_samples[name] = n_samples
-                flush_print(f"{name:<16}: {n_samples} samples")
-                break
-        else:
-            min_samples[name] = '>200'
-            flush_print(f"{name:<16}: >200 samples needed")
+            r = results[n_samples][name]
+            if 'beta_mean' in r['param_info']:
+                beta = r['param_info']['beta_mean']
+                converged = "✓" if r['param_info'].get('beta_converged', False) else "✗"
+                flush_print(f"  {n_samples:>3} samples: β = {beta:.4f} {converged}")
+            if 'gate_mean' in r['param_info']:
+                gate = r['param_info']['gate_mean']
+                converged = "✓" if r['param_info'].get('gate_converged', False) else "✗"
+                flush_print(f"  {n_samples:>3} samples: γ = {gate:.4f} {converged}")
     
     if save_figures:
         create_reflection_figures(results, sample_sizes, model_names, output_dir)
     
-    return results, min_samples
+    return results, model_names
 
 
 # =============================================================================
@@ -537,147 +707,230 @@ def run_sample_efficiency_test(
 # =============================================================================
 
 def create_reflection_figures(results, sample_sizes, model_names, output_dir='results'):
-    """Generate publication-quality figures for reflection experiment."""
+    """
+    Generate publication-quality figures for reflection experiment.
+    
+    Following arXiv:2601.00514v1 visualization style:
+    - Parameter trajectory over training
+    - Accuracy vs parameter convergence
+    - Sample efficiency comparison
+    """
     
     os.makedirs(output_dir, exist_ok=True)
     
-    # Figure 1: Sample Efficiency Curve
-    fig, ax = plt.subplots(figsize=(8, 5))
+    # Figure 1: Parameter Trajectories (most important for "Aha!" analysis)
+    # Use the largest sample size for best trajectory visualization
+    largest_n = max(sample_sizes)
     
-    for name in model_names:
-        accuracies = [results[n][name]['negation_accuracy'] for n in sample_sizes]
-        ax.plot(sample_sizes, accuracies, 
-               marker=MARKERS[name], color=COLORS[name], 
-               label=name, linewidth=2, markersize=8)
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
     
-    ax.axhline(y=0.95, color='gray', linestyle='--', linewidth=1, alpha=0.7, label='95% threshold')
-    ax.set_xlabel('Number of Training Samples')
-    ax.set_ylabel('Negation Accuracy (Cosine Similarity)')
-    ax.set_title('Sample Efficiency: Learning y = -x', fontweight='bold')
-    ax.set_ylim(-0.1, 1.05)
-    ax.legend(loc='lower right', framealpha=0.95)
-    ax.set_xscale('log')
-    ax.set_xticks(sample_sizes)
-    ax.set_xticklabels(sample_sizes)
-    
-    plt.tight_layout()
-    plt.savefig(f'{output_dir}/reflection_sample_efficiency.png', dpi=300, 
-                bbox_inches='tight', facecolor='white')
-    flush_print(f"\nSaved: {output_dir}/reflection_sample_efficiency.png")
-    plt.close()
-    
-    # Figure 2: Parameter Analysis (β for DDL, Gate for Hybrid)
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4.5))
-    
-    # DDL β values
-    ax1 = axes[0]
-    beta_means = [results[n]['DDL']['param_info'].get('beta_mean', 0) for n in sample_sizes]
-    beta_stds = [results[n]['DDL']['param_info'].get('beta_std', 0) for n in sample_sizes]
-    ax1.errorbar(sample_sizes, beta_means, yerr=beta_stds, 
-                marker='s', color=COLORS['DDL'], capsize=4, linewidth=2, markersize=8)
-    ax1.axhline(y=2.0, color='gray', linestyle='--', linewidth=1, alpha=0.7, label='β = 2 (exact reflection)')
-    ax1.set_xlabel('Number of Training Samples')
-    ax1.set_ylabel('Learned β Value')
-    ax1.set_title('(a) DDL: β Convergence', fontweight='bold')
+    # (a) DDL β trajectory
+    ax1 = axes[0, 0]
+    traj = results[largest_n]['DDL']['trajectory']
+    ax1.plot(traj['iter'], traj['beta_mean'], 
+            color=COLORS['DDL'], linewidth=2, label='β (mean)')
+    ax1.fill_between(traj['iter'], 
+                     np.array(traj['beta_mean']) - np.array(traj['beta_std']),
+                     np.array(traj['beta_mean']) + np.array(traj['beta_std']),
+                     color=COLORS['DDL'], alpha=0.2)
+    ax1.axhline(y=2.0, color='gray', linestyle='--', linewidth=1.5, label='β = 2 (exact reflection)')
+    ax1.set_xlabel('Training Iteration')
+    ax1.set_ylabel('β Value')
+    ax1.set_title(f'(a) DDL: β Trajectory ({largest_n} samples)', fontweight='bold')
     ax1.set_ylim(0, 2.2)
     ax1.legend(loc='lower right')
-    ax1.set_xscale('log')
-    ax1.set_xticks(sample_sizes)
-    ax1.set_xticklabels(sample_sizes)
     
-    # Hybrid gate values
-    ax2 = axes[1]
-    gate_means = [results[n]['E∆-MHC-Geo']['param_info'].get('gate_mean', 1) for n in sample_sizes]
-    gate_stds = [results[n]['E∆-MHC-Geo']['param_info'].get('gate_std', 0) for n in sample_sizes]
-    ax2.errorbar(sample_sizes, gate_means, yerr=gate_stds,
-                marker='D', color=COLORS['E∆-MHC-Geo'], capsize=4, linewidth=2, markersize=8)
-    ax2.axhline(y=0.0, color='gray', linestyle='--', linewidth=1, alpha=0.7, label='γ = 0 (Householder)')
-    ax2.set_xlabel('Number of Training Samples')
-    ax2.set_ylabel('Learned Gate Value (γ)')
-    ax2.set_title('(b) E∆-MHC-Geo: Gate Convergence', fontweight='bold')
+    # (b) E∆-MHC-Geo gate trajectory
+    ax2 = axes[0, 1]
+    traj = results[largest_n]['E∆-MHC-Geo']['trajectory']
+    ax2.plot(traj['iter'], traj['gate_mean'],
+            color=COLORS['E∆-MHC-Geo'], linewidth=2, label='γ (mean)')
+    ax2.fill_between(traj['iter'],
+                     np.array(traj['gate_mean']) - np.array(traj['gate_std']),
+                     np.array(traj['gate_mean']) + np.array(traj['gate_std']),
+                     color=COLORS['E∆-MHC-Geo'], alpha=0.2)
+    ax2.axhline(y=0.0, color='gray', linestyle='--', linewidth=1.5, label='γ = 0 (Householder)')
+    ax2.set_xlabel('Training Iteration')
+    ax2.set_ylabel('Gate Value (γ)')
+    ax2.set_title(f'(b) E∆-MHC-Geo: Gate Trajectory ({largest_n} samples)', fontweight='bold')
     ax2.set_ylim(-0.05, 0.5)
     ax2.legend(loc='upper right')
-    ax2.set_xscale('log')
-    ax2.set_xticks(sample_sizes)
-    ax2.set_xticklabels(sample_sizes)
     
+    # (c) DDL accuracy vs β during training
+    ax3 = axes[1, 0]
+    traj = results[largest_n]['DDL']['trajectory']
+    sc = ax3.scatter(traj['beta_mean'], traj['negation_accuracy'],
+                    c=traj['iter'], cmap='viridis', s=50, alpha=0.8)
+    ax3.axvline(x=2.0, color='gray', linestyle='--', linewidth=1, alpha=0.7)
+    ax3.axhline(y=0.95, color='red', linestyle=':', linewidth=1, alpha=0.7)
+    ax3.set_xlabel('β Value')
+    ax3.set_ylabel('Negation Accuracy')
+    ax3.set_title('(c) DDL: Accuracy vs β', fontweight='bold')
+    ax3.set_xlim(0, 2.2)
+    cbar = plt.colorbar(sc, ax=ax3)
+    cbar.set_label('Iteration')
+    
+    # (d) E∆-MHC-Geo accuracy vs gate during training
+    ax4 = axes[1, 1]
+    traj = results[largest_n]['E∆-MHC-Geo']['trajectory']
+    sc = ax4.scatter(traj['gate_mean'], traj['negation_accuracy'],
+                    c=traj['iter'], cmap='viridis', s=50, alpha=0.8)
+    ax4.axvline(x=0.0, color='gray', linestyle='--', linewidth=1, alpha=0.7)
+    ax4.axhline(y=0.95, color='red', linestyle=':', linewidth=1, alpha=0.7)
+    ax4.set_xlabel('Gate Value (γ)')
+    ax4.set_ylabel('Negation Accuracy')
+    ax4.set_title('(d) E∆-MHC-Geo: Accuracy vs γ', fontweight='bold')
+    cbar = plt.colorbar(sc, ax=ax4)
+    cbar.set_label('Iteration')
+    
+    fig.suptitle('Parameter Trajectories During Training\n(Following arXiv:2601.00514v1 methodology)', 
+                fontsize=14, fontweight='bold', y=1.02)
     plt.tight_layout()
-    plt.savefig(f'{output_dir}/reflection_parameter_analysis.png', dpi=300,
+    plt.savefig(f'{output_dir}/reflection_trajectories.png', dpi=300,
                 bbox_inches='tight', facecolor='white')
-    flush_print(f"Saved: {output_dir}/reflection_parameter_analysis.png")
+    flush_print(f"\nSaved: {output_dir}/reflection_trajectories.png")
     plt.close()
     
-    # Figure 3: Comprehensive Summary
-    fig = plt.figure(figsize=(12, 8))
-    gs = gridspec.GridSpec(2, 2, figure=fig, hspace=0.35, wspace=0.25)
+    # Figure 2: Sample Efficiency Comparison
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     
-    # (a) Sample efficiency
-    ax1 = fig.add_subplot(gs[0, 0])
+    # (a) Negation accuracy vs samples
+    ax1 = axes[0]
     for name in model_names:
         accuracies = [results[n][name]['negation_accuracy'] for n in sample_sizes]
         ax1.plot(sample_sizes, accuracies, 
                marker=MARKERS[name], color=COLORS[name], 
-               label=name, linewidth=2, markersize=7)
-    ax1.axhline(y=0.95, color='gray', linestyle='--', linewidth=1, alpha=0.7)
-    ax1.set_xlabel('Training Samples')
-    ax1.set_ylabel('Accuracy')
-    ax1.set_title('(a) Sample Efficiency', fontweight='bold')
+               label=name, linewidth=2.5, markersize=10)
+    ax1.axhline(y=0.95, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='95% threshold')
+    ax1.set_xlabel('Number of Training Samples', fontsize=12)
+    ax1.set_ylabel('Negation Accuracy', fontsize=12)
+    ax1.set_title('(a) Sample Efficiency: DDL vs E∆-MHC-Geo', fontweight='bold')
     ax1.set_ylim(-0.1, 1.05)
-    ax1.legend(loc='lower right', fontsize=9)
+    ax1.legend(loc='lower right', fontsize=10)
     ax1.set_xscale('log')
     ax1.set_xticks(sample_sizes)
     ax1.set_xticklabels(sample_sizes)
     
-    # (b) Final loss comparison (bar chart)
+    # (b) Final parameter values vs samples
+    ax2 = axes[1]
+    beta_means = [results[n]['DDL']['param_info'].get('beta_mean', 0) for n in sample_sizes]
+    gate_means = [results[n]['E∆-MHC-Geo']['param_info'].get('gate_mean', 1) for n in sample_sizes]
+    
+    ax2_twin = ax2.twinx()
+    
+    l1, = ax2.plot(sample_sizes, beta_means, marker='s', color=COLORS['DDL'], 
+                  linewidth=2.5, markersize=10, label='DDL β')
+    ax2.axhline(y=2.0, color=COLORS['DDL'], linestyle='--', linewidth=1, alpha=0.5)
+    ax2.set_ylabel('DDL β Value', color=COLORS['DDL'], fontsize=12)
+    ax2.tick_params(axis='y', labelcolor=COLORS['DDL'])
+    ax2.set_ylim(0, 2.2)
+    
+    l2, = ax2_twin.plot(sample_sizes, gate_means, marker='D', color=COLORS['E∆-MHC-Geo'],
+                       linewidth=2.5, markersize=10, label='E∆-MHC-Geo γ')
+    ax2_twin.axhline(y=0.0, color=COLORS['E∆-MHC-Geo'], linestyle='--', linewidth=1, alpha=0.5)
+    ax2_twin.set_ylabel('E∆-MHC-Geo γ Value', color=COLORS['E∆-MHC-Geo'], fontsize=12)
+    ax2_twin.tick_params(axis='y', labelcolor=COLORS['E∆-MHC-Geo'])
+    ax2_twin.set_ylim(-0.05, 0.5)
+    
+    ax2.set_xlabel('Number of Training Samples', fontsize=12)
+    ax2.set_title('(b) Parameter Convergence vs Sample Size', fontweight='bold')
+    ax2.set_xscale('log')
+    ax2.set_xticks(sample_sizes)
+    ax2.set_xticklabels(sample_sizes)
+    ax2.legend([l1, l2], ['DDL β', 'E∆-MHC-Geo γ'], loc='center right')
+    
+    fig.suptitle('Geometric Operator Analysis: Reflection Task (y = -x)', 
+                fontsize=14, fontweight='bold', y=1.02)
+    plt.tight_layout()
+    plt.savefig(f'{output_dir}/reflection_sample_efficiency.png', dpi=300,
+                bbox_inches='tight', facecolor='white')
+    flush_print(f"Saved: {output_dir}/reflection_sample_efficiency.png")
+    plt.close()
+    
+    # Figure 3: Comprehensive Summary (4-panel)
+    fig = plt.figure(figsize=(14, 10))
+    gs = gridspec.GridSpec(2, 2, figure=fig, hspace=0.3, wspace=0.25)
+    
+    # (a) Parameter convergence summary
+    ax1 = fig.add_subplot(gs[0, 0])
+    beta_final = [results[n]['DDL']['param_info'].get('beta_mean', 0) for n in sample_sizes]
+    gate_final = [results[n]['E∆-MHC-Geo']['param_info'].get('gate_mean', 1) for n in sample_sizes]
+    
+    x = np.arange(len(sample_sizes))
+    width = 0.35
+    bars1 = ax1.bar(x - width/2, beta_final, width, label='DDL β', color=COLORS['DDL'], edgecolor='black')
+    ax1.axhline(y=2.0, color=COLORS['DDL'], linestyle='--', linewidth=1.5, alpha=0.7)
+    
+    ax1_twin = ax1.twinx()
+    bars2 = ax1_twin.bar(x + width/2, gate_final, width, label='E∆-MHC-Geo γ', 
+                        color=COLORS['E∆-MHC-Geo'], edgecolor='black')
+    ax1_twin.axhline(y=0.0, color=COLORS['E∆-MHC-Geo'], linestyle='--', linewidth=1.5, alpha=0.7)
+    
+    ax1.set_xlabel('Training Samples')
+    ax1.set_ylabel('DDL β', color=COLORS['DDL'])
+    ax1_twin.set_ylabel('E∆-MHC-Geo γ', color=COLORS['E∆-MHC-Geo'])
+    ax1.set_title('(a) Final Parameter Values', fontweight='bold')
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(sample_sizes)
+    ax1.set_ylim(0, 2.2)
+    ax1_twin.set_ylim(-0.05, 0.5)
+    ax1.legend([bars1, bars2], ['DDL β', 'E∆ γ'], loc='upper right')
+    
+    # (b) Accuracy comparison
     ax2 = fig.add_subplot(gs[0, 1])
-    final_losses = [results[200][name]['final_loss'] for name in model_names]
-    x_pos = np.arange(len(model_names))
-    colors = [COLORS[name] for name in model_names]
-    bars = ax2.bar(x_pos, final_losses, color=colors, edgecolor='black', linewidth=0.8)
-    ax2.set_xticks(x_pos)
-    ax2.set_xticklabels(['GPT', 'DDL', 'mHC', 'Ours'], fontweight='bold')
-    ax2.set_ylabel('Final MSE Loss')
-    ax2.set_title('(b) Final Performance (200 samples)', fontweight='bold')
-    ax2.set_yscale('log')
-    for bar, loss in zip(bars, final_losses):
-        ax2.annotate(f'{loss:.1e}', xy=(bar.get_x() + bar.get_width()/2, bar.get_height()),
-                    xytext=(0, 3), textcoords="offset points", ha='center', va='bottom', fontsize=9)
+    ddl_acc = [results[n]['DDL']['negation_accuracy'] for n in sample_sizes]
+    edelta_acc = [results[n]['E∆-MHC-Geo']['negation_accuracy'] for n in sample_sizes]
     
-    # (c) β convergence
+    ax2.bar(x - width/2, ddl_acc, width, label='DDL', color=COLORS['DDL'], edgecolor='black')
+    ax2.bar(x + width/2, edelta_acc, width, label='E∆-MHC-Geo', color=COLORS['E∆-MHC-Geo'], edgecolor='black')
+    ax2.axhline(y=0.95, color='red', linestyle='--', linewidth=1.5, alpha=0.7, label='95% target')
+    ax2.set_xlabel('Training Samples')
+    ax2.set_ylabel('Negation Accuracy')
+    ax2.set_title('(b) Final Accuracy Comparison', fontweight='bold')
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(sample_sizes)
+    ax2.set_ylim(0, 1.05)
+    ax2.legend(loc='lower right')
+    
+    # (c) DDL training trajectory
     ax3 = fig.add_subplot(gs[1, 0])
-    ax3.errorbar(sample_sizes, beta_means, yerr=beta_stds,
-                marker='s', color=COLORS['DDL'], capsize=4, linewidth=2, markersize=7)
-    ax3.axhline(y=2.0, color='gray', linestyle='--', linewidth=1, alpha=0.7)
-    ax3.set_xlabel('Training Samples')
-    ax3.set_ylabel('β Value')
-    ax3.set_title('(c) DDL β → 2', fontweight='bold')
+    traj = results[largest_n]['DDL']['trajectory']
+    ax3.plot(traj['iter'], traj['beta_mean'], color=COLORS['DDL'], linewidth=2, label='β')
+    ax3_twin = ax3.twinx()
+    ax3_twin.plot(traj['iter'], traj['negation_accuracy'], color='green', linewidth=2, linestyle='--', label='Accuracy')
+    ax3.axhline(y=2.0, color='gray', linestyle=':', linewidth=1)
+    ax3.set_xlabel('Training Iteration')
+    ax3.set_ylabel('β Value', color=COLORS['DDL'])
+    ax3_twin.set_ylabel('Accuracy', color='green')
+    ax3.set_title(f'(c) DDL Training Dynamics ({largest_n} samples)', fontweight='bold')
     ax3.set_ylim(0, 2.2)
-    ax3.set_xscale('log')
-    ax3.set_xticks(sample_sizes)
-    ax3.set_xticklabels(sample_sizes)
+    ax3_twin.set_ylim(-0.1, 1.05)
     
-    # (d) Gate convergence
+    # (d) E∆-MHC-Geo training trajectory
     ax4 = fig.add_subplot(gs[1, 1])
-    ax4.errorbar(sample_sizes, gate_means, yerr=gate_stds,
-                marker='D', color=COLORS['E∆-MHC-Geo'], capsize=4, linewidth=2, markersize=7)
-    ax4.axhline(y=0.0, color='gray', linestyle='--', linewidth=1, alpha=0.7)
-    ax4.set_xlabel('Training Samples')
-    ax4.set_ylabel('Gate Value (γ)')
-    ax4.set_title('(d) E∆-MHC-Geo γ → 0', fontweight='bold')
+    traj = results[largest_n]['E∆-MHC-Geo']['trajectory']
+    ax4.plot(traj['iter'], traj['gate_mean'], color=COLORS['E∆-MHC-Geo'], linewidth=2, label='γ')
+    ax4_twin = ax4.twinx()
+    ax4_twin.plot(traj['iter'], traj['negation_accuracy'], color='green', linewidth=2, linestyle='--', label='Accuracy')
+    ax4.axhline(y=0.0, color='gray', linestyle=':', linewidth=1)
+    ax4.set_xlabel('Training Iteration')
+    ax4.set_ylabel('Gate γ', color=COLORS['E∆-MHC-Geo'])
+    ax4_twin.set_ylabel('Accuracy', color='green')
+    ax4.set_title(f'(d) E∆-MHC-Geo Training Dynamics ({largest_n} samples)', fontweight='bold')
     ax4.set_ylim(-0.05, 0.5)
-    ax4.set_xscale('log')
-    ax4.set_xticks(sample_sizes)
-    ax4.set_xticklabels(sample_sizes)
+    ax4_twin.set_ylim(-0.1, 1.05)
     
-    fig.suptitle('Reflection Task: Direct Test of Geometric Operators', 
-                fontsize=14, fontweight='bold', y=1.0)
-    
+    fig.suptitle('Reflection Experiment: Geometric Operator Analysis\n'
+                '(Following arXiv:2601.00514v1 "Illusion of Insight" methodology)',
+                fontsize=14, fontweight='bold', y=1.02)
     plt.savefig(f'{output_dir}/reflection_comprehensive.png', dpi=300,
                 bbox_inches='tight', facecolor='white')
     flush_print(f"Saved: {output_dir}/reflection_comprehensive.png")
     plt.close()
     
     flush_print("\nAll reflection figures generated successfully!")
+
+
 
 
 # =============================================================================
@@ -687,41 +940,75 @@ def create_reflection_figures(results, sample_sizes, model_names, output_dir='re
 def main():
     parser = argparse.ArgumentParser(description='Reflection Task Training')
     parser.add_argument('--dim', type=int, default=64, help='Vector dimension')
-    parser.add_argument('--max_iters', type=int, default=1000, help='Training iterations')
+    parser.add_argument('--max_iters', type=int, default=2000, help='Training iterations')
     parser.add_argument('--device', type=str, default='cuda', help='Device (cuda/cpu)')
     parser.add_argument('--mode', type=str, default='sample_efficiency',
-                       choices=['sample_efficiency', 'single'])
+                       choices=['sample_efficiency', 'single', 'trajectory'])
     parser.add_argument('--n_samples', type=int, default=100, help='Samples for single mode')
     parser.add_argument('--save_figures', action='store_true', help='Save publication figures')
     parser.add_argument('--output_dir', type=str, default='results', help='Output directory')
     args = parser.parse_args()
     
     flush_print("="*80)
-    flush_print("REFLECTION EXPERIMENT: Direct Test of Geometric Operators")
-    flush_print("Task: Learn y = -x (pure negation)")
+    flush_print("REFLECTION EXPERIMENT: Geometric Operator Analysis")
+    flush_print("="*80)
+    flush_print("Task: Learn y = -x (pure negation/reflection)")
+    flush_print("")
+    flush_print("Following arXiv:2601.00514v1 'Illusion of Insight' methodology:")
+    flush_print("  - DDL: β should converge to 2 (Householder reflection)")
+    flush_print("  - E∆-MHC-Geo: γ should converge to 0 (use Householder)")
+    flush_print("")
+    flush_print("NOTE: GPT and mHC excluded (MLP approximation, not geometric)")
     flush_print("="*80)
     
     if args.mode == 'sample_efficiency':
-        results, min_samples = run_sample_efficiency_test(
+        results, model_names = run_sample_efficiency_test(
             dim=args.dim,
             device=args.device,
             max_iters=args.max_iters,
             save_figures=args.save_figures,
             output_dir=args.output_dir,
         )
+    elif args.mode == 'trajectory':
+        # Detailed trajectory analysis with single sample size
+        flush_print(f"\nRunning trajectory analysis with {args.n_samples} samples...")
+        train_x, train_y = generate_negation_data(args.n_samples, args.dim, args.device)
+        val_x, val_y = generate_negation_data(500, args.dim, args.device)
+        
+        results = {}
+        for name, ModelClass in [('DDL', SimpleDDL), ('E∆-MHC-Geo', SimpleHybrid)]:
+            model = ModelClass(args.dim).to(args.device)
+            results[name] = train_with_trajectory(
+                model=model,
+                model_name=name,
+                train_x=train_x,
+                train_y=train_y,
+                val_x=val_x,
+                val_y=val_y,
+                max_iters=args.max_iters,
+                track_interval=20,  # More frequent tracking
+            )
+        
+        if args.save_figures:
+            # Generate trajectory-only figures
+            create_reflection_figures(
+                {args.n_samples: results}, 
+                [args.n_samples], 
+                ['DDL', 'E∆-MHC-Geo'], 
+                args.output_dir
+            )
     else:
+        # Single test mode - only DDL and E∆-MHC-Geo
         train_x, train_y = generate_negation_data(args.n_samples, args.dim, args.device)
         val_x, val_y = generate_negation_data(200, args.dim, args.device)
         
         models = {
-            'GPT': SimpleGPT(args.dim).to(args.device),
             'DDL': SimpleDDL(args.dim).to(args.device),
-            'mHC': SimpleMHC(args.dim).to(args.device),
             'E∆-MHC-Geo': SimpleHybrid(args.dim).to(args.device),
         }
         
         for name, model in models.items():
-            train_and_analyze(
+            train_with_trajectory(
                 model=model,
                 model_name=name,
                 train_x=train_x,

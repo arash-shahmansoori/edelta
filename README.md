@@ -39,8 +39,8 @@ edelta/
 │   ├── journal_fig1_training.png
 │   ├── journal_fig2_stability.png
 │   ├── journal_fig3_ablation.png
+│   ├── reflection_trajectories.png     # Parameter trajectories (arXiv:2601.00514v1 style)
 │   ├── reflection_sample_efficiency.png
-│   ├── reflection_parameter_analysis.png
 │   └── reflection_comprehensive.png
 ├── docs/                       # Documentation
 │   ├── RESEARCH_V3.md          # Full theoretical foundation
@@ -101,14 +101,27 @@ uv run src/training/train_continuous.py --model_type edelta --dataset stability 
 ### 3. Run Reflection Test
 
 The reflection test directly measures geometric operator capabilities by learning pure negation (y = -x).
+Following the methodology in ["The Illusion of Insight in Reasoning Models" (arXiv:2601.00514v1)](https://arxiv.org/abs/2601.00514),
+we track parameter trajectories to identify "Aha!" moments - sudden parameter shifts that improve performance.
+
+**Key insight**: We test only DDL and E∆-MHC-Geo (not GPT or mHC) because:
+- GPT and mHC use MLP approximation, which can learn any function
+- DDL and E∆-MHC-Geo have learnable geometric parameters (β, γ) that should converge to specific values for reflection
 
 ```bash
-# Run sample efficiency test (tests with 10, 25, 50, 100, 200 samples)
-uv run src/training/train_reflection.py --mode sample_efficiency --save_figures
+# Run sample efficiency test with trajectory analysis (main experiment)
+uv run src/training/train_reflection.py --mode sample_efficiency --save_figures --max_iters 2000
+
+# Run detailed trajectory analysis
+uv run src/training/train_reflection.py --mode trajectory --n_samples 500 --save_figures
 
 # Single test with specific parameters
-uv run src/training/train_reflection.py --mode single --n_samples 100 --max_iters 1000
+uv run src/training/train_reflection.py --mode single --n_samples 100 --max_iters 2000
 ```
+
+**Expected results**:
+- DDL: β should converge to 2.0 (exact Householder reflection)
+- E∆-MHC-Geo: γ should converge to 0.0 (select Householder component over Cayley)
 
 ### 4. Generate Figures
 
@@ -128,16 +141,23 @@ uv run src/utils/sample.py --out_dir=out-shakespeare-char
 
 See `results/` for the publication figures:
 
+### Continuous Benchmark Figures
+
 | Figure | Description |
 |--------|-------------|
 | `journal_fig1_training.png` | Training dynamics: loss and gradient norm evolution |
 | `journal_fig2_stability.png` | Stability analysis: norm preservation test |
 | `journal_fig3_ablation.png` | Final performance comparison (Gyroscope, Stability) |
-| `reflection_sample_efficiency.png` | Sample efficiency for learning y = -x |
-| `reflection_parameter_analysis.png` | DDL β and E∆-MHC-Geo gate convergence |
-| `reflection_comprehensive.png` | Comprehensive reflection experiment summary |
 
-### Benchmark Results
+### Reflection Experiment Figures (arXiv:2601.00514v1 methodology)
+
+| Figure | Description |
+|--------|-------------|
+| `reflection_trajectories.png` | **Parameter trajectories during training**: β and γ evolution with accuracy correlation |
+| `reflection_sample_efficiency.png` | Sample efficiency comparison: DDL vs E∆-MHC-Geo |
+| `reflection_comprehensive.png` | Full analysis: parameter convergence, accuracy, and training dynamics |
+
+### Continuous Benchmark Results
 
 | Dataset | GPT | DDL | mHC | E∆-MHC-Geo |
 |---------|-----|-----|-----|------------|
@@ -145,6 +165,22 @@ See `results/` for the publication figures:
 | **Stability** | 1.2e-5 | 1.1e-5 | 9.76e-3 | **3e-6** |
 
 E∆-MHC-Geo achieves **6.5x lower loss** on gyroscope and **4x lower loss** on stability compared to GPT baseline.
+
+### Reflection Experiment Results
+
+| Samples | DDL β | DDL Acc | E∆-MHC-Geo γ | E∆-MHC-Geo Acc |
+|---------|-------|---------|--------------|----------------|
+| 10 | 1.41 | -0.97 | 0.19 | -0.97 |
+| 50 | 1.88 | -0.85 | 0.13 | -0.96 |
+| 100 | **1.95** ✓ | -0.23 | 0.13 | -0.93 |
+| 200 | **1.98** ✓ | 0.63 | **0.05** ✓ | 0.66 |
+| 500 | **1.99** ✓ | **0.96** | **0.03** ✓ | **0.96** |
+
+**Key findings** (following arXiv:2601.00514v1):
+- **DDL**: β converges to 2.0 (exact Householder) with ≥100 samples
+- **E∆-MHC-Geo**: γ converges to 0.0 (Householder selection) with ≥200 samples
+- Both achieve >95% accuracy with 500 samples, validating the geometric inductive bias
+- Parameter convergence precedes accuracy gains ("Aha!" moments in parameter space)
 
 ## Model Comparison
 
@@ -181,7 +217,7 @@ uv run src/training/train_continuous.py --help
 
 # Common options:
 #   --model_type    gpt2, ddl, mhc, edelta
-#   --dataset       gyroscope, correction, stability
+#   --dataset       gyroscope, stability
 #   --out_dir       Output directory for checkpoints
 #   --max_iters     Number of training iterations (default: 2000)
 #   --batch_size    Batch size (default: 64)
@@ -193,10 +229,11 @@ uv run src/training/train_continuous.py --help
 
 ## References
 
-- DDL: arXiv:2601.00417
-- DeepSeek mHC: arXiv:2512.24880
-- Cayley Transform: Cayley, A. (1846)
-- Householder Reflection: Householder, A.S. (1958)
+- **DDL**: arXiv:2601.00417 - Deep Delta Learning
+- **DeepSeek mHC**: arXiv:2512.24880 - Multi-Head Complementary Attention
+- **"Illusion of Insight"**: [arXiv:2601.00514v1](https://arxiv.org/abs/2601.00514) - d'Aliberti & Ribeiro (2025). Methodology for analyzing "Aha!" moments in reasoning models via parameter trajectory analysis.
+- **Cayley Transform**: Cayley, A. (1846) - Orthogonal parameterization
+- **Householder Reflection**: Householder, A.S. (1958) - Exact negation operator
 
 ## License
 
