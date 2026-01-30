@@ -2,7 +2,29 @@
 
 A topologically complete transformer architecture operating on the full Orthogonal Group O(n).
 
-![nanoGPT](assets/nanogpt.jpg)
+## Key Results: 6.5x Improvement on Geometric Benchmarks
+
+![Benchmark Results](assets/benchmark_results.png)
+
+**E∆-MHC-Geo achieves state-of-the-art performance:**
+- **Gyroscope (Manifold Precision)**: 6e-04 loss — **6.5x better** than GPT baseline
+- **Stability (Isometry Test)**: 3e-06 loss — **3-4x better** than GPT/DDL
+
+## Parameter Convergence: Theory Validated by Experiment
+
+![Parameter Convergence](assets/parameter_convergence.png)
+
+Following [arXiv:2601.00514v1](https://arxiv.org/abs/2601.00514) methodology, we track parameter trajectories:
+- **DDL**: β converges to 2.0 (exact Householder reflection)
+- **E∆-MHC-Geo**: γ converges to 0.0 (learns to select Householder component)
+
+## Training Dynamics: Stable Convergence
+
+![Training Dynamics](assets/training_dynamics.png)
+
+E∆-MHC-Geo (green) shows stable training with lowest final loss across all benchmarks.
+
+---
 
 ## Overview
 
