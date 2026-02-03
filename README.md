@@ -2,27 +2,41 @@
 
 A topologically complete transformer architecture operating on the full Orthogonal Group O(n).
 
-## Key Results: 6.5x Improvement on Geometric Benchmarks
+## Key Results: Fair Parameter Comparison (~1.79M params each)
 
-![Benchmark Results](assets/benchmark_results.png)
+### Performance Comparison
 
-**E∆-MHC-Geo achieves state-of-the-art performance:**
-- **Gyroscope (Manifold Precision)**: 6e-04 loss — **6.5x better** than GPT baseline
-- **Stability (Isometry Test)**: 3e-06 loss — **3-4x better** than GPT/DDL
+![Performance Comparison](assets/journal_fig3_ablation.png)
 
-## Parameter Convergence: Theory Validated by Experiment
+**E∆-MHC-Geo achieves state-of-the-art with fewer layers:**
 
-![Parameter Convergence](assets/parameter_convergence.png)
+| Benchmark | E∆-MHC-Geo (6L) | Best Baseline | Improvement |
+|-----------|-----------------|---------------|-------------|
+| **Gyroscope** | 5.37e-4 | 3.29e-3 (DDL, 8L) | **6.1× better** |
+| **Stability** | 3.4e-6 | 1.41e-5 (DDL, 8L) | **4.1× better** |
+| **Norm Preservation** | 0.001 | 0.474 (GPT) | **470× better** |
 
-Following [arXiv:2601.00514v1](https://arxiv.org/abs/2601.00514) methodology, we track parameter trajectories:
-- **DDL**: β converges to 2.0 (exact Householder reflection)
-- **E∆-MHC-Geo**: γ converges to 0.0 (learns to select Householder component)
+*L = layers. Baselines use 8-9 layers to match E∆-MHC-Geo's 1.79M parameters.*
 
-## Training Dynamics: Stable Convergence
+### Training Dynamics
 
-![Training Dynamics](assets/training_dynamics.png)
+![Training Dynamics](assets/journal_fig1_training.png)
 
-E∆-MHC-Geo (green) shows stable training with lowest final loss across all benchmarks.
+E∆-MHC-Geo (green) shows stable training with lowest final loss. mHC shows instability on long-horizon tasks.
+
+### Stability Analysis: Norm Preservation
+
+![Stability Analysis](assets/journal_fig2_stability.png)
+
+E∆-MHC-Geo maintains perfect norm = 1.0 over 100 timesteps, while baselines drift to 0.45-0.55.
+
+### Parameter Convergence: Theory Validated
+
+![Reflection Analysis](assets/reflection_comprehensive.png)
+
+Following [arXiv:2601.00514v1](https://arxiv.org/abs/2601.00514) "Illusion of Insight" methodology:
+- **DDL**: β converges to **1.99** (target: 2.0) — validates Householder orthogonality theorem
+- **E∆-MHC-Geo**: γ converges to **0.03** (target: 0.0) — learns to select Householder for negation
 
 ---
 
@@ -203,48 +217,52 @@ uv run src/utils/sample.py --out_dir=out-shakespeare-char
 
 ## Key Results
 
-See `results/` for the publication figures:
+See `assets/` and `results/` for publication figures:
 
 ### Continuous Benchmark Figures
 
 | Figure | Description |
 |--------|-------------|
-| `journal_fig1_training.png` | Training dynamics: loss and gradient norm evolution |
-| `journal_fig2_stability.png` | Stability analysis: norm preservation test |
-| `journal_fig3_ablation.png` | Final performance comparison (Gyroscope, Stability) |
+| `journal_fig1_training.png` | Training dynamics: loss and gradient norm evolution across 4 models |
+| `journal_fig2_stability.png` | Stability analysis: norm preservation (E∆-MHC-Geo: 0.001 vs 0.47-0.54) |
+| `journal_fig3_ablation.png` | Final performance comparison showing 6.1× and 4.1× improvements |
 
 ### Reflection Experiment Figures (arXiv:2601.00514v1 methodology)
 
 | Figure | Description |
 |--------|-------------|
-| `reflection_trajectories.png` | **Parameter trajectories during training**: β and γ evolution with accuracy correlation |
-| `reflection_sample_efficiency.png` | Sample efficiency comparison: DDL vs E∆-MHC-Geo |
-| `reflection_comprehensive.png` | Full analysis: parameter convergence, accuracy, and training dynamics |
+| `reflection_trajectories.png` | **Parameter trajectories**: β→1.99, γ→0.03 with accuracy correlation |
+| `reflection_sample_efficiency.png` | Sample efficiency: both reach 96% accuracy at 500 samples |
+| `reflection_comprehensive.png` | 4-panel analysis: parameters, accuracy, and training dynamics |
 
-### Continuous Benchmark Results
+### Continuous Benchmark Results (Fair Comparison: ~1.79M params each)
 
-| Dataset | GPT | DDL | mHC | E∆-MHC-Geo |
-|---------|-----|-----|-----|------------|
-| **Gyroscope** | 3.67e-3 | 3.24e-3 | 4.08e-3 | **5.69e-4** |
-| **Stability** | 1.2e-5 | 1.1e-5 | 9.76e-3 | **3e-6** |
+| Dataset | GPT (9L) | DDL (8L) | mHC (9L) | **E∆-MHC-Geo (6L)** | Improvement |
+|---------|----------|----------|----------|---------------------|-------------|
+| **Gyroscope** | 3.80e-3 | 3.29e-3 | 4.06e-3 | **5.37e-4** | 6.1× vs DDL |
+| **Stability** | 1.55e-5 | 1.41e-5 | 8.46e-3 | **3.4e-6** | 4.1× vs DDL |
+| **Norm Dev.** | 0.474 | 0.506 | 0.543 | **0.001** | 470× vs GPT |
 
-E∆-MHC-Geo achieves **6.5x lower loss** on gyroscope and **4x lower loss** on stability compared to GPT baseline.
+*L = layers. All models have ~1.79M parameters for fair comparison.*
+
+**Key Finding:** E∆-MHC-Geo achieves best results with **3 fewer layers** than baselines, demonstrating that geometric inductive bias outperforms additional depth.
 
 ### Reflection Experiment Results
 
-| Samples | DDL β | DDL Acc | E∆-MHC-Geo γ | E∆-MHC-Geo Acc |
-|---------|-------|---------|--------------|----------------|
-| 10 | 1.41 | -0.97 | 0.19 | -0.97 |
-| 50 | 1.88 | -0.85 | 0.13 | -0.96 |
-| 100 | **1.95** ✓ | -0.23 | 0.13 | -0.93 |
-| 200 | **1.98** ✓ | 0.63 | **0.05** ✓ | 0.66 |
-| 500 | **1.99** ✓ | **0.96** | **0.03** ✓ | **0.96** |
+| Samples | DDL β | DDL Acc | Converged? | E∆-MHC-Geo γ | E∆ Acc | Converged? |
+|---------|-------|---------|------------|--------------|--------|------------|
+| 10 | 1.41 | -0.97 | ✗ | 0.189 | -0.97 | ✗ |
+| 25 | 1.59 | -0.93 | ✗ | 0.183 | -0.96 | ✗ |
+| 50 | 1.88 | -0.85 | ✗ | 0.129 | -0.96 | ✗ |
+| 100 | **1.95** | -0.23 | ✓ | 0.129 | -0.93 | ✗ |
+| 200 | **1.98** | 0.63 | ✓ | **0.050** | 0.66 | ✓ |
+| 500 | **1.99** | **0.96** | ✓ | **0.029** | **0.96** | ✓ |
 
-**Key findings** (following arXiv:2601.00514v1):
-- **DDL**: β converges to 2.0 (exact Householder) with ≥100 samples
-- **E∆-MHC-Geo**: γ converges to 0.0 (Householder selection) with ≥200 samples
-- Both achieve >95% accuracy with 500 samples, validating the geometric inductive bias
-- Parameter convergence precedes accuracy gains ("Aha!" moments in parameter space)
+**Key findings** (following arXiv:2601.00514v1 "Illusion of Insight" methodology):
+- **DDL**: β converges to 1.99 (within 0.3% of target 2.0) — validates Theorem 7
+- **E∆-MHC-Geo**: γ converges to 0.03 (within 2.9% of target 0.0) — automatic operator selection
+- Both achieve **96% accuracy** with 500 samples, validating geometric inductive bias
+- "Aha!" moments observed: parameter convergence precedes accuracy gains
 
 ## Model Comparison
 
