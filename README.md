@@ -32,7 +32,7 @@ E∆-MHC-Geo maintains perfect norm = 1.0 over 100 timesteps, while baselines dr
 
 ### Parameter Convergence: Theory Validated
 
-![Reflection Analysis](assets/reflection_comprehensive.png)
+![Reflection Analysis](results/reflection_aha_moment.png)
 
 Following [arXiv:2601.00514v1](https://arxiv.org/abs/2601.00514) "Illusion of Insight" methodology:
 - **DDL**: β converges to **1.99** (target: 2.0) — validates Householder orthogonality theorem
