@@ -179,11 +179,9 @@ def get_args():
     parser.add_argument('--init_gate_bias', type=float, default=0.0,
                         help='Initial gate bias (>0=prefer rotation, <0=prefer reflection)')
     
-    # Fair comparison modes
-    parser.add_argument('--fair_params', action='store_true',
-                        help='[OLD] Reduce E∆-MHC-Geo geo_hidden_ratio from 4 to 8')
+    # Fair comparison mode
     parser.add_argument('--match_proposed_params', action='store_true',
-                        help='[RECOMMENDED] Scale up baselines to match E∆-MHC-Geo (~1.79M params)')
+                        help='Scale up baseline n_layer to match E∆-MHC-Geo params (~1.79M)')
     
     return parser.parse_args()
 
@@ -195,44 +193,40 @@ def create_model(args, input_dim: int, block_size: int):
     similar parameter counts across models (E∆ uses n_embd=104 when baseline uses 128).
     """
     
-    # Fair parameter comparison modes:
+    # Fair parameter comparison mode:
     # 
-    # Option 1: --fair_params (OLD - not recommended)
-    #   Reduces E∆-MHC-Geo capacity to match baselines
+    # --match_proposed_params (RECOMMENDED)
+    #   Keeps n_embd=128 for ALL models (same representation dimension)
+    #   Increases n_layer for baselines to match E∆-MHC-Geo's ~1.79M params
+    #   This tests: does geometric inductive bias beat additional depth?
     #
-    # Option 2: --match_proposed_params (RECOMMENDED)
-    #   Scales UP baselines to match E∆-MHC-Geo's ~1.79M params
-    #   This is better: keeps E∆-MHC-Geo at full design, gives baselines MORE capacity
-    #   If baselines still lose with more params, that's a stronger result!
-    #
-    # Baseline n_embd values to match E∆-MHC-Geo (n_embd=128, geo_ratio=4, 1.788M params):
-    #   GPT: n_embd=156 → 1.764M (0.987x)
-    #   DDL: n_embd=148 → 1.789M (1.001x)
-    #   mHC: n_embd=156 → 1.811M (1.013x)
+    # Configuration (all with n_embd=128):
+    #   E∆-MHC-Geo: n_layer=6 → 1.788M (reference)
+    #   GPT:        n_layer=9 → 1.780M (0.996x)
+    #   DDL:        n_layer=8 → 1.784M (0.998x)
+    #   mHC:        n_layer=9 → 1.838M (1.028x)
     
     n_embd = args.n_embd
+    n_layer = args.n_layer
     use_mhc_projections = True
     geo_hidden_ratio = 4  # Default for E∆-MHC-Geo
     
-    # Map baseline n_embd to match E∆-MHC-Geo's param count
-    BASELINE_NEMBD_FOR_MATCH = {
-        'gpt2': 156,  # 1.76M params
-        'ddl': 148,   # 1.79M params  
-        'mhc': 156,   # 1.81M params
+    # Map baseline n_layer to match E∆-MHC-Geo's param count (keeping n_embd=128)
+    BASELINE_NLAYER_FOR_MATCH = {
+        'gpt2': 9,   # 1.780M params (0.996x)
+        'ddl': 8,    # 1.784M params (0.998x)
+        'mhc': 9,    # 1.838M params (1.028x)
     }
     
     if args.match_proposed_params and args.model_type != 'edelta':
-        n_embd = BASELINE_NEMBD_FOR_MATCH.get(args.model_type, args.n_embd)
-        print(f"\n[MATCH PROPOSED] Scaling up {args.model_type} n_embd: {args.n_embd} → {n_embd}")
-    
-    if args.fair_params and args.model_type == 'edelta':
-        geo_hidden_ratio = 8  # Smaller geo networks: n_embd // 8
-        print(f"\n[FAIR PARAMS] E∆-MHC-Geo: geo_hidden_ratio=8 (reduced from 4)")
+        n_layer = BASELINE_NLAYER_FOR_MATCH.get(args.model_type, args.n_layer)
+        print(f"\n[MATCH PROPOSED] Scaling up {args.model_type} n_layer: {args.n_layer} → {n_layer}")
+        print(f"                 (keeping n_embd={n_embd} for same representation dimension)")
     
     if args.model_type == 'gpt2':
         print(f"\n=== Standard GPT (Baseline) ===")
         config = BaselineConfig(
-            n_layer=args.n_layer,
+            n_layer=n_layer,
             n_head=args.n_head,
             n_embd=n_embd,
             dropout=args.dropout,
@@ -246,7 +240,7 @@ def create_model(args, input_dim: int, block_size: int):
         print(f"\n=== Deep Delta Learning (DDL) ===")
         print(f"  Reference: arXiv:2601.00417")
         config = DDLConfig(
-            n_layer=args.n_layer,
+            n_layer=n_layer,
             n_head=args.n_head,
             n_embd=n_embd,
             dropout=args.dropout,
@@ -260,7 +254,7 @@ def create_model(args, input_dim: int, block_size: int):
         print(f"\n=== DeepSeek mHC (Data-Dependent) ===")
         print(f"  Reference: arXiv:2512.24880")
         config = mHCConfig(
-            n_layer=args.n_layer,
+            n_layer=n_layer,
             n_head=args.n_head,
             n_embd=n_embd,
             n_streams=args.n_streams,
@@ -277,10 +271,8 @@ def create_model(args, input_dim: int, block_size: int):
         print(f"\n=== E∆-MHC-Geo (Proposed) ===")
         print(f"  init_gate_bias: {args.init_gate_bias}")
         print(f"  gate_reg_weight: {args.gate_reg_weight}")
-        if args.fair_params:
-            print(f"  [FAIR PARAMS] geo_hidden_ratio={geo_hidden_ratio} (reduced from 4)")
         config = EdeltaConfig(
-            n_layer=args.n_layer,
+            n_layer=n_layer,
             n_head=args.n_head,
             n_embd=n_embd,
             n_streams=args.n_streams,
