@@ -1044,18 +1044,18 @@ flowchart TB
 #### Figure 3: Spectral Properties Comparison
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '13px', 'fontFamily': 'Arial', 'primaryTextColor': '#000'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '16px', 'fontFamily': 'Arial', 'primaryTextColor': '#000000'}}}%%
 flowchart TB
-    subgraph TOP[" "]
-        direction LR
-        DDL["(a) Householder<br/>β=2: λ=−1 ✓<br/>Orth: conditional"]
-        CAY["(b) Cayley<br/>|λ|=1 ∀β ✓<br/>λ=−1: never ✗"]
-    end
-    DDL & CAY --> HYB["(c) E∆-MHC-Geo: G = γQ + (1−γ)H₂<br/>Orthogonal ∧ Negation ✓"]
-    style DDL fill:#f5f5f5,stroke:#333
-    style CAY fill:#f5f5f5,stroke:#333
-    style HYB fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
-    style TOP fill:none,stroke:none
+    DDL["<b>(a) Householder/DDL</b><br/>Negation: β=2 gives λ=−1<br/>Orthogonal only if β∈{0,2}"]
+    CAY["<b>(b) Cayley Transform</b><br/>Always orthogonal: |λ|=1<br/>Cannot reach λ=−1"]
+    HYB["<b>(c) E∆-MHC-Geo Hybrid</b><br/>G = γ·Q + (1−γ)·H₂<br/>Both orthogonal AND negation"]
+    
+    DDL --> HYB
+    CAY --> HYB
+    
+    style DDL fill:#ffffff,stroke:#333333,stroke-width:2px
+    style CAY fill:#ffffff,stroke:#333333,stroke-width:2px
+    style HYB fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px
 ```
 
 | Operator | Orthogonality | Negation (λ = −1) | det | Condition |
