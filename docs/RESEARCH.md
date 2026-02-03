@@ -27,8 +27,8 @@ $$\mathbf{X}' = \gamma(\mathbf{X}) \cdot \mathcal{C}(\mathbf{X}) + (1 - \gamma(\
 
 | Benchmark | E∆-MHC-Geo (6L) | Best Baseline | Improvement |
 |-----------|-----------------|---------------|-------------|
-| Gyroscope (manifold precision) | **5.37e-4** | 3.29e-3 (DDL, 8L) | **6.1×** |
-| Stability (isometry) | **3.4e-6** | 1.41e-5 (DDL, 8L) | **4.1×** |
+| Gyroscope (manifold precision) | **5.69e-4** | 3.43e-3 (DDL, 8L) | **6.0×** |
+| Stability (isometry) | **3.39e-6** | 1.41e-5 (DDL, 8L) | **4.2×** |
 | Norm preservation | **0.001** | 0.474 (GPT) | **470×** |
 | Reflection (negation) | **96%** acc, γ→0.03 | 96% acc, β→1.99 | Matches theory |
 
@@ -1297,18 +1297,18 @@ This follows the "Illusion of Insight" methodology [6] for analyzing parameter t
 
 | Dataset | GPT (9L) | DDL (8L) | mHC (9L) | **E∆-MHC-Geo (6L)** | vs GPT | vs DDL |
 |---------|----------|----------|----------|---------------------|--------|--------|
-| **Gyroscope** | 3.80e-3 | 3.29e-3 | 4.06e-3 | **5.37e-4** | **7.1×** | **6.1×** |
-| **Stability** | 1.55e-5 | 1.41e-5 | 8.46e-3 | **3.4e-6** | **4.6×** | **4.1×** |
+| **Gyroscope** | 3.80e-3 | 3.43e-3 | 4.32e-3 | **5.69e-4** | **6.7×** | **6.0×** |
+| **Stability** | 1.55e-5 | 1.41e-5 | 8.52e-3 | **3.39e-6** | **4.6×** | **4.2×** |
 
 *Note: L = number of layers. All models have ~1.79M parameters (see Table A.4 for details).*
 
 **Detailed Analysis:**
 
 **1. Gyroscope Benchmark (Manifold Precision):**
-E∆-MHC-Geo achieves **6.1× lower loss** than the best baseline (DDL) with 2 fewer layers. This benchmark tests whether models can maintain manifold constraints during continuous rotation prediction. The result validates Theorem 1 (Unconditional Orthogonality): while DDL's orthogonality degrades as β wanders from 2.0 during training, E∆-MHC-Geo maintains perfect orthogonality for any β value. The rotation angles tested (0.1–2.5 radians) specifically expose DDL's weakness at θ > 0.5 radians.
+E∆-MHC-Geo achieves **6.0× lower loss** than the best baseline (DDL) with 2 fewer layers. This benchmark tests whether models can maintain manifold constraints during continuous rotation prediction. The result validates Theorem 1 (Unconditional Orthogonality): while DDL's orthogonality degrades as β wanders from 2.0 during training, E∆-MHC-Geo maintains perfect orthogonality for any β value. The rotation angles tested (0.1–2.5 radians) specifically expose DDL's weakness at θ > 0.5 radians.
 
 **2. Stability Benchmark (Long-horizon Isometry):**
-E∆-MHC-Geo achieves **4.1× lower loss** than DDL on 127-step sequences. This is the definitive test of Theorem 2 (Isometry/Norm Preservation). Over 127 timesteps, small orthogonality violations compound catastrophically:
+E∆-MHC-Geo achieves **4.2× lower loss** than DDL on 127-step sequences. This is the definitive test of Theorem 2 (Isometry/Norm Preservation). Over 127 timesteps, small orthogonality violations compound catastrophically:
 - GPT: norm drifts to ~0.55 (45% error)
 - DDL: norm drifts to ~0.50 (50% error)  
 - mHC: norm drifts to ~0.45 (55% error)
@@ -1516,7 +1516,7 @@ We have presented the **E∆-MHC-Geo Transformer**, a novel architecture that ac
 
 > **Insight 5 (Midpoint Collapse):** Linear interpolation between rotation and reflection at $\gamma \approx 0.5$ produces non-orthogonal matrices. The regularization $4\gamma(1-\gamma)$ forces the model to "jump" between the two disconnected components of $O(n)$. *Validated: γ trajectories show monotonic decrease to 0, never oscillating around 0.5.*
 
-> **Insight 6 (Geometric Inductive Bias > Depth):** E∆-MHC-Geo with 6 layers outperforms baselines with 8-9 layers at matched parameter count. The geometric structure (guaranteed orthogonality + input-adaptive rotation) provides stronger inductive bias than raw depth. *Validated: 6.1× better on Gyroscope, 4.1× better on Stability.*
+> **Insight 6 (Geometric Inductive Bias > Depth):** E∆-MHC-Geo with 6 layers outperforms baselines with 8-9 layers at matched parameter count. The geometric structure (guaranteed orthogonality + input-adaptive rotation) provides stronger inductive bias than raw depth. *Validated: 6.0× better on Gyroscope, 4.2× better on Stability.*
 
 ### 11.3 Architecture Selection Guide
 
@@ -1556,7 +1556,7 @@ flowchart TB
 
 Based on our comprehensive experimental validation with fair parameter comparison:
 
-1. **Superior Performance:** 6.1× better on manifold tasks, 4.1× better on isometry tasks, 470× better norm preservation—all with fewer layers than baselines.
+1. **Superior Performance:** 6.0× better on manifold tasks, 4.2× better on isometry tasks, 470× better norm preservation—all with fewer layers than baselines.
 
 2. **Automatic Operator Selection:** The learned gate γ automatically selects the appropriate geometric operator:
    - γ → 1 (Cayley) for rotation/manifold tasks
@@ -1820,5 +1820,5 @@ bash scripts/run_reflection.sh
 *Document Version 3.5 — January 2026*
 *E∆-MHC-Geo: Adaptive Geodesic Operations with Guaranteed Orthogonality*
 *Complete experimental analysis with fair parameter comparison (~1.79M params)*
-*Key findings: 6.1× better on manifold, 470× better norm preservation, 33% fewer layers*
+*Key findings: 6.0× better on manifold, 470× better norm preservation, 33% fewer layers*
 *© 2026 Arash Shahmansoori. All rights reserved.*

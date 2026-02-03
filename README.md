@@ -12,8 +12,8 @@ A topologically complete transformer architecture operating on the full Orthogon
 
 | Benchmark | E∆-MHC-Geo (6L) | Best Baseline | Improvement |
 |-----------|-----------------|---------------|-------------|
-| **Gyroscope** | 5.37e-4 | 3.29e-3 (DDL, 8L) | **6.1× better** |
-| **Stability** | 3.4e-6 | 1.41e-5 (DDL, 8L) | **4.1× better** |
+| **Gyroscope** | 5.69e-4 | 3.43e-3 (DDL, 8L) | **6.0× better** |
+| **Stability** | 3.39e-6 | 1.41e-5 (DDL, 8L) | **4.2× better** |
 | **Norm Preservation** | 0.001 | 0.474 (GPT) | **470× better** |
 
 *L = layers. Baselines use 8-9 layers to match E∆-MHC-Geo's 1.79M parameters.*
@@ -222,7 +222,7 @@ See `assets/` and `results/` for publication figures:
 |--------|-------------|
 | `journal_fig1_training.png` | Training dynamics: loss and gradient norm evolution across 4 models |
 | `journal_fig2_stability.png` | Stability analysis: norm preservation (E∆-MHC-Geo: 0.001 vs 0.47-0.54) |
-| `journal_fig3_ablation.png` | Final performance comparison showing 6.1× and 4.1× improvements |
+| `journal_fig3_ablation.png` | Final performance comparison showing 6.0× and 4.2× improvements |
 
 ### Reflection Experiment Figure (arXiv:2601.00514v1 methodology)
 
@@ -234,8 +234,8 @@ See `assets/` and `results/` for publication figures:
 
 | Dataset | GPT (9L) | DDL (8L) | mHC (9L) | **E∆-MHC-Geo (6L)** | Improvement |
 |---------|----------|----------|----------|---------------------|-------------|
-| **Gyroscope** | 3.80e-3 | 3.29e-3 | 4.06e-3 | **5.37e-4** | 6.1× vs DDL |
-| **Stability** | 1.55e-5 | 1.41e-5 | 8.46e-3 | **3.4e-6** | 4.1× vs DDL |
+| **Gyroscope** | 3.80e-3 | 3.43e-3 | 4.32e-3 | **5.69e-4** | 6.0× vs DDL |
+| **Stability** | 1.55e-5 | 1.41e-5 | 8.52e-3 | **3.39e-6** | 4.2× vs DDL |
 | **Norm Dev.** | 0.474 | 0.506 | 0.543 | **0.001** | 470× vs GPT |
 
 *L = layers. All models have ~1.79M parameters for fair comparison.*
