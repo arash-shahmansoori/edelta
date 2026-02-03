@@ -21,6 +21,27 @@ echo "E∆-MHC-Geo: n_layer=6 (with geometric operators)"
 echo "Baselines:  n_layer scaled up (more depth to compensate)"
 echo "============================================================"
 
+# Verify datasets exist
+echo ""
+echo "=== Checking datasets ==="
+missing=0
+
+for dataset in gyroscope stability; do
+    if [ -f "data/${dataset}/train_x.npy" ] && [ -f "data/${dataset}/val_x.npy" ]; then
+        echo "✓ ${dataset}: OK"
+    else
+        echo "✗ ${dataset}: MISSING"
+        missing=1
+    fi
+done
+
+if [ $missing -eq 1 ]; then
+    echo ""
+    echo "ERROR: Some datasets are missing!"
+    echo "Please run: bash scripts/prepare_data.sh"
+    exit 1
+fi
+
 # Create output directories
 mkdir -p out-matched
 
