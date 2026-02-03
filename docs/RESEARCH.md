@@ -1452,11 +1452,18 @@ This experiment specifically tests *geometric operators* (Householder reflection
 
 **Figure 10: Stability Benchmark Analysis.** Three-panel analysis: (a) Output norm evolution over 100 sequence positions—E∆-MHC-Geo (green) maintains perfect norm=1.0, while others deviate to 0.5-0.7. (b) Mean norm deviation from target (|norm - 1.0|): GPT=0.474, DDL=0.506, mHC=0.543, **E∆-MHC-Geo=0.001** (470× better). (c) Final validation loss comparison showing E∆-MHC-Geo achieves 3e-6 vs 9e-3 for mHC.
 
-#### Figure 11: Comprehensive Reflection Analysis
+#### Figure 11: "Aha!" Moment Visualization
 
-![Reflection Comprehensive](../results/reflection_comprehensive.png)
+![Reflection Aha Moment](../results/reflection_aha_moment.png)
 
-**Figure 11: Complete Reflection Experiment Summary (following arXiv:2601.00514v1).** Four-panel analysis: (a) Final parameter values across sample sizes—DDL β increases from 1.41 to 1.99, E∆-MHC-Geo γ decreases from 0.19 to 0.03. (b) Negation accuracy comparison—both methods reach ~96% at 500 samples. (c) DDL training dynamics showing β→2.0 with concurrent accuracy improvement. (d) E∆-MHC-Geo training dynamics showing γ→0.0 as the model learns to select the Householder component for negation.
+**Figure 11: "Aha!" Moment Visualization (following arXiv:2601.00514v1 "Illusion of Insight" methodology).** Four-panel analysis demonstrating parameter convergence and the critical role of symmetry breaking initialization (Section 6.5):
+
+- **(a) DDL β Trajectory:** β converges from 1.0 → 2.0 (exact Householder reflection) with uncertainty bands showing consistent convergence across validation samples.
+- **(b) E∆-MHC-Geo γ Trajectory:** γ converges from 0.18 → 0.01 with symmetry-breaking initialization. The model discovers Householder is optimal for negation. Note: Unbiased initialization (γ=0.5) fails due to zero-gradient at midpoint (see Section 6.5).
+- **(c) DDL "Aha!" Moment:** Scatter plot of accuracy vs β colored by training iteration. The dramatic accuracy jump from -1.0 to +0.96 occurs precisely as β approaches 2.0.
+- **(d) E∆-MHC-Geo "Aha!" Moment:** Scatter plot of accuracy vs γ colored by training iteration. Accuracy improves as γ decreases, validating automatic operator selection.
+
+**Key Finding on Initialization (Section 6.5):** The midpoint collapse regularization has zero gradient at γ=0.5, requiring symmetry-breaking initialization for tasks with spherically symmetric inputs (like pure negation). Continuous benchmarks work with unbiased init because input features naturally break symmetry.
 
 **Training Stability Analysis:**
 
@@ -1467,7 +1474,7 @@ E∆-MHC-Geo (green in Figure 9) exhibits the smoothest loss curves across both 
 E∆-MHC-Geo maintains bounded gradient norms throughout training (Figure 9, row b). The theoretical explanation: orthogonal matrices have singular values exactly 1, so gradient flow through $\mathbf{Q}^\top$ neither explodes nor vanishes. DDL's gradients spike when β ≠ 2 (singular values deviate from 1), visible as gradient norm oscillations.
 
 **3. Midpoint Collapse Effectiveness:**
-The regularization $\mathcal{L}_{\text{gate}} = 4\gamma(1-\gamma)$ successfully prevents γ from lingering near 0.5. In Figure 11(d), γ monotonically decreases from 0.189 to 0.029—never oscillating around the non-orthogonal midpoint. This validates the "jump, don't swim" strategy: the model quickly commits to one component of O(n) rather than interpolating.
+The regularization $\mathcal{L}_{\text{gate}} = 4\gamma(1-\gamma)$ successfully prevents γ from lingering near 0.5 *when combined with proper initialization*. In Figure 11(b), γ monotonically decreases from 0.18 to 0.01—never oscillating around the non-orthogonal midpoint. This validates the "jump, don't swim" strategy. **Important caveat (Section 6.5):** The regularization gradient is zero at γ=0.5, so symmetry-breaking initialization is required for tasks with homogeneous inputs. For continuous benchmarks, input feature variation provides natural symmetry breaking.
 
 **4. mHC Instability:**
 On the Stability benchmark, mHC shows erratic gradient behavior (annotation in Figure 9). The Sinkhorn normalization's approximate orthogonality compounds errors over 127 timesteps, causing training instability. This is *not* a hyperparameter issue—it's fundamental to the Sinkhorn approach.
@@ -1860,7 +1867,7 @@ edelta/
 │   ├── run_matched_params.sh   # Fair comparison experiments
 │   └── run_reflection.sh       # Reflection experiments
 └── docs/
-    └── RESEARCH_V3.md          # This document
+    └── RESEARCH.md          # This document
 ```
 
 **Reproduction Commands:**

@@ -85,8 +85,7 @@ edelta/
 │   ├── journal_fig3_ablation.png
 │   └── reflection_aha_moment.png       # "Aha!" moment visualization (arXiv:2601.00514v1 style)
 ├── docs/                       # Documentation
-│   ├── RESEARCH_V3.md          # Full theoretical foundation
-│   └── ...
+│   └── RESEARCH.md             # Full theoretical foundation (1800+ lines)
 └── archive/                    # Old/experimental code
 ```
 
@@ -229,7 +228,7 @@ See `assets/` and `results/` for publication figures:
 
 | Figure | Description |
 |--------|-------------|
-| `reflection_aha_moment.png` | **"Aha!" Moment Visualization**: (a-b) Parameter trajectories (β→2, γ→0), (c-d) Scatter plots showing sudden accuracy jumps as parameters converge—the key visual insight |
+| `reflection_aha_moment.png` | **"Aha!" Moment Visualization**: (a) DDL β: 1.0→2.0, (b) E∆ γ: 0.18→0.01 with uncertainty bands, (c-d) Scatter plots showing "Aha!" moments as parameters converge. **Note:** Uses symmetry-breaking init (see Section 6.5) |
 
 ### Continuous Benchmark Results (Fair Comparison: ~1.79M params each)
 
@@ -264,7 +263,7 @@ See `assets/` and `results/` for publication figures:
 - The midpoint collapse regularization `L = 4γ(1-γ)` has **zero gradient at γ=0.5**
 - Continuous benchmarks (gyroscope, stability) work with unbiased init because input features naturally break symmetry
 - Pure reflection task requires explicit symmetry-breaking initialization (γ ≈ 0.18)
-- See `docs/RESEARCH_V3.md` Section 6.5 for detailed analysis
+- See `docs/RESEARCH.md` Section 6.5 for detailed analysis
 
 ## Model Comparison
 
@@ -291,7 +290,7 @@ The E∆-MHC-Geo architecture is built on:
    - `G_γ(X) = γ·Q(X)·X + (1-γ)·H₂(k(X))·X`
    - Full O(n) coverage via thermodynamic gating
 
-See `docs/RESEARCH_V3.md` for the complete mathematical foundation.
+See `docs/RESEARCH.md` for the complete mathematical foundation.
 
 ## Training Options
 

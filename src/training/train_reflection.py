@@ -176,7 +176,7 @@ class SimpleHybrid(nn.Module):
     
     For y = -x: gate should converge to γ → 0 (use Householder)
     
-    Reference: RESEARCH_V3.md Section 5.3, 6.3
+    Reference: RESEARCH.md Section 5.3, 6.3
     """
     
     def __init__(self, dim: int, hidden_dim: int = HIDDEN_DIM, gate_reg_weight: float = 0.5):
@@ -211,7 +211,7 @@ class SimpleHybrid(nn.Module):
         
         # Thermodynamic gate with symmetry-breaking initialization
         # 
-        # CRITICAL FINDING (see RESEARCH_V3.md Section 6.5):
+        # CRITICAL FINDING (see RESEARCH.md Section 6.5):
         # The midpoint collapse regularization L = 4γ(1-γ) has gradient:
         #   ∂L/∂γ = 4(1-2γ) = 0  at γ = 0.5
         # 

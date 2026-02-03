@@ -13,7 +13,7 @@ E∆-MHC-Geo achieves FULL O(n) coverage:
   - Householder Reflection (det=-1): Negation, correction, "changing one's mind"
   - Thermodynamic Gating: Entropy-aware switching between the two components
 
-=== MATHEMATICAL FOUNDATION (from RESEARCH_V3.md) ===
+=== MATHEMATICAL FOUNDATION (from RESEARCH.md) ===
 
 1. Data-Dependent Cayley Transform (Definition 2.3):
    Q(x) = (I + (β/2)A(x))⁻¹(I - (β/2)A(x))
@@ -58,7 +58,7 @@ Attention: O(N²d) where N >> S
 Overhead ratio: < 0.001%
 
 References:
-- RESEARCH_V3.md: Theoretical foundation
+- RESEARCH.md: Theoretical foundation
 - DeepSeek mHC paper (arXiv:2512.24880)
 - Cayley, A. (1846): Original Cayley transform
 - Householder, A.S. (1958): Householder reflection
@@ -78,7 +78,7 @@ class EdeltaMHCGeoHybrid(nn.Module):
     """
     E∆-MHC-Geo Hybrid Operator: Data-Dependent Cayley Rotation + Householder Reflection
     
-    Implements the DDC-Hybrid operator from RESEARCH_V3.md (Definition 5.2):
+    Implements the DDC-Hybrid operator from RESEARCH.md (Definition 5.2):
     
         G_γ(X) = γ(X)·Q(X)·X + (1-γ(X))·H₂(k(X))·X
     
@@ -125,12 +125,12 @@ class EdeltaMHCGeoHybrid(nn.Module):
         self.gate_reg_weight = gate_reg_weight
         
         # Hidden dimension for generator networks
-        # Default: n_embd // 4 (original design from RESEARCH_V3.md Section 7.1)
+        # Default: n_embd // 4 (original design from RESEARCH.md Section 7.1)
         hidden_dim = d_model // geo_hidden_ratio
         
         # === DATA-DEPENDENT CAYLEY ROTATION (Definition 2.1) ===
         # u(x) and v(x) are computed via 2-layer MLPs with GELU activation
-        # as specified in RESEARCH_V3.md Section 7.1
+        # as specified in RESEARCH.md Section 7.1
         self.u_net = nn.Sequential(
             nn.Linear(d_model, hidden_dim),
             nn.GELU(),
@@ -493,7 +493,7 @@ class Block(nn.Module):
     """
     E∆-MHC-Geo Block: Full mHC-style architecture with Geodesic hybrid transform.
     
-    Implements the full layer transition from RESEARCH_V3.md Section 7.4:
+    Implements the full layer transition from RESEARCH.md Section 7.4:
     
         X_{l+1} = G_γ(X_l) + H_postᵀ · F(H_pre · LN(G_γ(X_l)))
     
@@ -503,7 +503,7 @@ class Block(nn.Module):
     - H_post: Post-mapping that broadcasts F output back to streams
     - F: Layer function (attention or MLP)
     
-    Components (matching RESEARCH_V3.md Section 7.3):
+    Components (matching RESEARCH.md Section 7.3):
     1. Data-dependent Cayley rotation (replaces mHC's doubly stochastic H_res)
     2. Householder reflection with β=2 FIXED (for negation capability)
     3. Thermodynamic gating (entropy-aware switching)
@@ -543,7 +543,7 @@ class Block(nn.Module):
             geo_hidden_ratio=geo_hidden_ratio
         )
         
-        # === mHC Pre/Post Mappings (RESEARCH_V3.md Section 7.2) ===
+        # === mHC Pre/Post Mappings (RESEARCH.md Section 7.2) ===
         # H_pre: Aggregates streams before layer function
         # H_post: Broadcasts layer output back to streams
         # Can be disabled for fair parameter comparison (use_mhc_projections=False)
@@ -569,7 +569,7 @@ class Block(nn.Module):
         """
         Forward pass implementing full mHC layer transition.
         
-        Equation (RESEARCH_V3.md Section 7.4):
+        Equation (RESEARCH.md Section 7.4):
             X_{l+1} = G_γ(X_l) + H_postᵀ · F(H_pre · LN(G_γ(X_l)))
         
         When use_mhc_projections=False (fair param comparison):
@@ -647,7 +647,7 @@ class GPT(nn.Module):
     
     A topologically complete transformer operating on the full Orthogonal Group O(n).
     
-    === THEORETICAL FOUNDATION (RESEARCH_V3.md) ===
+    === THEORETICAL FOUNDATION (RESEARCH.md) ===
     
     Layer Transition Equation (Section 7.4):
         X_{l+1} = G_γ(X_l) + H_postᵀ · F(H_pre · LN(G_γ(X_l)))
