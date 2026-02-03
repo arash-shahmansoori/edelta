@@ -1,12 +1,12 @@
 #!/bin/bash
-# Run fair comparison experiments with similar parameter counts
-# E∆-MHC-Geo uses n_embd=104 when baselines use n_embd=128
+# Run fair comparison experiments
+# E∆-MHC-Geo uses geo_hidden_ratio=8 (reduced from 4) for smaller geo networks
 
 set -e
 
 echo "============================================================"
 echo "FAIR COMPARISON EXPERIMENTS"
-echo "All models have ~1.2M parameters"
+echo "E∆-MHC-Geo: geo_hidden_ratio=8 (n_embd//8 instead of n_embd//4)"
 echo "============================================================"
 
 # Create output directories
@@ -59,8 +59,8 @@ uv run src/training/train_continuous.py \
     --n_embd $N_EMBD \
     --batch_size $BATCH_SIZE
 
-# E∆-MHC-Geo (with fair_params - disables mHC projections, smaller geo nets)
-echo "Training E∆-MHC-Geo (fair params: ~1.09x GPT) on gyroscope..."
+# E∆-MHC-Geo (with fair_params - smaller geo networks: n_embd//8)
+echo "Training E∆-MHC-Geo (fair params: geo_hidden_ratio=8) on gyroscope..."
 uv run src/training/train_continuous.py \
     --model_type edelta \
     --dataset gyroscope \
@@ -112,8 +112,8 @@ uv run src/training/train_continuous.py \
     --n_embd $N_EMBD \
     --batch_size $BATCH_SIZE
 
-# E∆-MHC-Geo (with fair_params - disables mHC projections, smaller geo nets)
-echo "Training E∆-MHC-Geo (fair params: ~1.09x GPT) on stability..."
+# E∆-MHC-Geo (with fair_params - smaller geo networks: n_embd//8)
+echo "Training E∆-MHC-Geo (fair params: geo_hidden_ratio=8) on stability..."
 uv run src/training/train_continuous.py \
     --model_type edelta \
     --dataset stability \

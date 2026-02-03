@@ -195,16 +195,15 @@ def create_model(args, input_dim: int, block_size: int):
     
     # Fair parameter comparison mode:
     # - Keeps n_embd the same for all models
-    # - For E∆-MHC-Geo: disables mHC projections and uses smaller geo hidden dim
-    # - Results in ~1.09x GPT params (vs 1.42x without fair mode)
+    # - For E∆-MHC-Geo: reduces geo network hidden dim from n_embd//4 to n_embd//8
+    # - Results in ~1.42x GPT params (reduced from ~1.50x)
     n_embd = args.n_embd
-    use_mhc_projections = True
-    geo_hidden_ratio = 4  # Default: larger geo networks
+    use_mhc_projections = True  # Always keep mHC projections
+    geo_hidden_ratio = 4  # Default: n_embd // 4
     
     if args.fair_params and args.model_type == 'edelta':
-        use_mhc_projections = False  # Disable h_pre/h_post projections
-        geo_hidden_ratio = 8  # Smaller geo networks
-        print(f"\n[FAIR PARAMS] E∆-MHC-Geo: use_mhc_projections=False, geo_hidden_ratio=8")
+        geo_hidden_ratio = 8  # Smaller geo networks: n_embd // 8
+        print(f"\n[FAIR PARAMS] E∆-MHC-Geo: geo_hidden_ratio=8 (reduced from 4)")
     
     if args.model_type == 'gpt2':
         print(f"\n=== Standard GPT (Baseline) ===")
@@ -255,7 +254,7 @@ def create_model(args, input_dim: int, block_size: int):
         print(f"  init_gate_bias: {args.init_gate_bias}")
         print(f"  gate_reg_weight: {args.gate_reg_weight}")
         if args.fair_params:
-            print(f"  [FAIR PARAMS] use_mhc_projections=False, geo_hidden_ratio={geo_hidden_ratio}")
+            print(f"  [FAIR PARAMS] geo_hidden_ratio={geo_hidden_ratio} (reduced from 4)")
         config = EdeltaConfig(
             n_layer=args.n_layer,
             n_head=args.n_head,
