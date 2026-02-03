@@ -1071,19 +1071,24 @@ flowchart TB
 The E∆-MHC-Geo Transformer replaces the standard additive residual connection $\mathbf{X} + F(\mathbf{X})$ with the geometric operator $\mathcal{G}_\gamma$. Each transformer block applies the geometric operator **twice**: once before the attention sub-layer and once before the MLP sub-layer.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '13px', 'fontFamily': 'Arial', 'primaryTextColor': '#000'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '14px', 'fontFamily': 'Arial', 'primaryTextColor': '#000'}}}%%
 flowchart TB
-    IN[["Embed + Pos"]] --> BLK
-    subgraph BLK["×L Blocks"]
-        direction TB
-        G1["G_γ"] --> LN1["LN→Attn"] --> R1((+))
+    IN["Embed + Pos"] --> X["X_l"]
+    subgraph BLK["E∆-MHC-Geo Block ×L"]
+        X --> G1["G_γ"]
+        G1 --> LN1["LN"] --> H1["H_pre"] --> ATT["Attention"] --> H2["H_post^T"] --> R1((+))
         G1 --> R1
-        R1 --> G2["G_γ"] --> LN2["LN→FFN"] --> R2((+))
+        R1 --> G2["G_γ"]
+        G2 --> LN2["LN"] --> H3["H_pre"] --> FFN["FFN"] --> H4["H_post^T"] --> R2((+))
         G2 --> R2
     end
-    BLK --> OUT[["LN → Head"]]
+    R2 --> OUT["LN → Head"]
     style G1 fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
     style G2 fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+    style H1 fill:#fff3e0,stroke:#e65100,stroke-width:1px
+    style H2 fill:#fff3e0,stroke:#e65100,stroke-width:1px
+    style H3 fill:#fff3e0,stroke:#e65100,stroke-width:1px
+    style H4 fill:#fff3e0,stroke:#e65100,stroke-width:1px
     style IN fill:#e3f2fd,stroke:#1565c0
     style OUT fill:#e3f2fd,stroke:#1565c0
 ```
