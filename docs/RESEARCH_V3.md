@@ -45,46 +45,55 @@ This unified architecture achieves:
 ### Figure 1: Comparison of Residual Connection Paradigms
 
 ```mermaid
-%%{init: {'theme': 'neutral', 'themeVariables': { 'primaryColor': '#f5f5f5', 'primaryTextColor': '#212121', 'primaryBorderColor': '#616161', 'lineColor': '#424242', 'fontSize': '14px'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ffffff', 'primaryTextColor': '#1a1a1a', 'primaryBorderColor': '#404040', 'lineColor': '#404040', 'fontSize': '11px', 'fontFamily': 'Times New Roman, serif'}}}%%
 flowchart LR
-    subgraph A["(a) Standard Residual"]
+    subgraph A[" "]
         direction TB
-        A1["X_l"] --> A2["F(·)"]
-        A1 --> A3
-        A2 --> A3(("X + F(X)"))
+        A0["<b>(a) Standard Residual</b>"]
+        A1["X<sub>l</sub>"] --> A2["F(·)"]
+        A1 --> A3(("+"))
+        A2 --> A3
+        A3 --> A4["X<sub>l+1</sub> = X + F(X)"]
     end
     
-    subgraph B["(b) DDL [1]"]
+    subgraph B[" "]
         direction TB
-        B1["X_l"] --> B2["H = I−βkk^T"]
-        B1 --> B3["βkv^T"]
-        B2 --> B4
-        B3 --> B4(("HX + βkv^T"))
+        B0["<b>(b) DDL</b>"]
+        B1["X<sub>l</sub>"] --> B2["H<sub>β</sub> = I − βkk<sup>T</sup>"]
+        B1 --> B3["βkv<sup>T</sup>"]
+        B2 --> B4(("+"))
+        B3 --> B4
+        B4 --> B5["X<sub>l+1</sub> = HX + βkv<sup>T</sup>"]
     end
     
-    subgraph C["(c) E∆-MHC-Geo (Ours)"]
+    subgraph C[" "]
         direction TB
-        C1["X_l"] --> C2["Q(X)∈SO(n)"]
-        C1 --> C3["H₂(k)"]
-        C2 --> C5
+        C0["<b>(c) E∆-MHC-Geo</b>"]
+        C1["X<sub>l</sub>"] --> C2["Q(X) ∈ SO(n)"]
+        C1 --> C3["H<sub>2</sub>(k)"]
+        C2 --> C5(("γ"))
         C3 --> C5
-        C4{{"γ(X)"}} --> C5(("γ·QX+(1−γ)·HX"))
+        C5 --> C6["X<sub>l+1</sub> = γQX + (1−γ)HX"]
     end
     
     A ~~~ B ~~~ C
     
-    style A fill:#fafafa,stroke:#9e9e9e,stroke-width:1px
-    style B fill:#fff8e1,stroke:#ffa000,stroke-width:1px
-    style C fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style A fill:#f8f8f8,stroke:#606060,stroke-width:1px
+    style B fill:#f8f8f8,stroke:#606060,stroke-width:1px
+    style C fill:#f0f7f0,stroke:#2d5a2d,stroke-width:2px
+    style A0 fill:none,stroke:none
+    style B0 fill:none,stroke:none
+    style C0 fill:none,stroke:none
 ```
 
-| Property | Standard | DDL | **E∆-MHC-Geo** |
-|----------|----------|-----|----------------|
-| Orthogonal | No | β∈{0,2} only | **Always** |
-| Negation | No | Yes (β=2) | **Yes (γ→0)** |
-| det(·) | 1 | −1 | **{−1,+1}** |
+| Property | Standard | DDL | E∆-MHC-Geo |
+|:---------|:--------:|:---:|:----------:|
+| Orthogonality | — | β ∈ {0,2} | **∀β** |
+| Negation (λ = −1) | — | β = 2 | **γ → 0** |
+| det(T) | +1 | −1 | {−1, +1} |
+| Input-adaptive | — | Yes | **Yes** |
 
-**Figure 1.** Comparison of residual connection paradigms. (a) Standard additive residual. (b) DDL with Householder operator—orthogonal only at β∈{0,2}. (c) Our E∆-MHC-Geo Hybrid combines Cayley rotation with Householder reflection via learned gate γ.
+**Figure 1.** Residual connection paradigms. (a) Standard additive residual with identity shortcut. (b) Deep Delta Learning (DDL) using Householder operator—orthogonal only at β ∈ {0, 2}. (c) Proposed E∆-MHC-Geo Hybrid combining Cayley rotation (Q ∈ SO(n), unconditionally orthogonal) with Householder reflection (H₂, β = 2 fixed) via learned thermodynamic gate γ(X).
 
 ---
 
@@ -428,30 +437,37 @@ $$\Rightarrow \beta\mu_k/2 \to -\infty$$
 This is impossible for any finite $\beta$ and $\mu_k$. **QED.**
 
 **Geometric interpretation:**
-- Cayley rotates information on the unit circle
-- Negation requires reaching the "opposite pole" at angle $\pi$
-- But $\arctan$ only maps to $(-\pi/2, \pi/2)$, so we can only reach angles in $(-\pi, \pi)$
-- The point $\pi$ (= $-\pi$) is the one point we can never reach!
+- Cayley eigenvalues lie on the unit circle: $|\lambda_k| = 1$ for all $\beta$
+- The map $\arctan: \mathbb{R} \to (-\pi/2, \pi/2)$ implies $\arg(\lambda) \in (-\pi, \pi)$
+- Negation requires $\lambda = -1 = e^{i\pi}$, but $\pm\pi$ is the excluded boundary
 
 ```mermaid
-%%{init: {'theme': 'neutral', 'themeVariables': { 'fontSize': '11px'}}}%%
-flowchart LR
-    subgraph CIRCLE["Unit Circle: Cayley Eigenvalues"]
-        direction TB
-        TOP["λ = −1 (π)<br/>UNREACHABLE"]
-        LEFT["λ = i<br/>(π/2)"]
-        RIGHT["λ = −i<br/>(−π/2)"]
-        BOT["λ = +1<br/>(0)"]
-        REACH["Reachable:<br/>arg(λ) ∈ (−π, π)"]
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '10px', 'fontFamily': 'Times New Roman, serif', 'primaryTextColor': '#1a1a1a'}}}%%
+flowchart TB
+    subgraph UNIT["Cayley Eigenvalue Distribution on S¹"]
+        direction LR
+        subgraph LEFT[" "]
+            L1["λ = e<sup>iθ</sup>"]
+            L2["θ = −2arctan(βμ/2)"]
+        end
+        subgraph CENTER[" "]
+            C1["<b>θ = π : EXCLUDED</b>"]
+            C2["λ = −1 unreachable"]
+        end
+        subgraph RIGHT[" "]
+            R1["Reachable: θ ∈ (−π, π)"]
+            R2["Full rotation except π"]
+        end
     end
     
-    style TOP fill:#ffebee,stroke:#c62828,stroke-width:2px,stroke-dasharray: 5 5
-    style REACH fill:#e8f5e9,stroke:#388e3c,stroke-width:1px
+    style CENTER fill:#f5f5f5,stroke:#8b0000,stroke-width:2px,stroke-dasharray:4 2
+    style LEFT fill:#f8f8f8,stroke:#404040,stroke-width:1px
+    style RIGHT fill:#f0f7f0,stroke:#2d5a2d,stroke-width:1px
 ```
 
-$$\lambda_k = e^{-2i\arctan(\beta\mu_k/2)}, \quad \arctan: \mathbb{R} \to \left(-\frac{\pi}{2}, \frac{\pi}{2}\right) \quad \Rightarrow \quad \arg(\lambda) \in (-\pi, \pi)$$
+$$\lambda_k = e^{-2i\arctan(\beta\mu_k/2)}, \quad \arctan: \mathbb{R} \to \left(-\frac{\pi}{2}, \frac{\pi}{2}\right) \implies \arg(\lambda) \in (-\pi, \pi) \text{ (open)}$$
 
-The eigenvalue $\lambda = -1 = e^{i\pi}$ requires $\arg = \pm\pi$, which is the **excluded boundary** of the open interval.
+Since $\lambda = -1 = e^{i\pi}$ requires $\arg = \pm\pi$, which lies on the **excluded boundary**, Cayley transforms cannot achieve negation for any finite parameter values.
 
 ### 5.2 The Householder Reflection: Achieving Negation
 
@@ -921,191 +937,217 @@ where $\mathcal{G}_\gamma(\mathbf{X}) = \gamma \cdot \mathbf{Q}(\mathbf{X})\math
 #### Figure 2: E∆-MHC-Geo Hybrid Block Architecture
 
 ```mermaid
-%%{init: {'theme': 'neutral', 'themeVariables': { 'fontSize': '13px', 'primaryColor': '#f5f5f5', 'primaryTextColor': '#212121', 'lineColor': '#616161'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '10px', 'fontFamily': 'Times New Roman, serif', 'primaryTextColor': '#1a1a1a', 'lineColor': '#404040'}}}%%
 flowchart TB
-    subgraph INPUT[" "]
-        X["X_l ∈ ℝ^{B×S×D}"]
+    subgraph INPUT["Input"]
+        X["X<sub>l</sub> ∈ ℝ<sup>B×S×D</sup>"]
     end
     
-    X --> POOL["Mean Pool: x̄"]
+    X --> POOL["x̄ = MeanPool(X<sub>l</sub>)"]
     
-    subgraph NETS["Generator Networks"]
+    subgraph GENERATORS["Parameter Generators"]
         direction LR
-        U["u_net"] ~~~ V["v_net"] ~~~ K["k_net"] ~~~ BETA["β_net"]
+        U["u = f<sub>u</sub>(x̄)"] ~~~ V["v = f<sub>v</sub>(x̄)"] ~~~ K["k̃ = f<sub>k</sub>(x̄)"] ~~~ BETA["β = f<sub>β</sub>(x̄)"]
     end
     
-    POOL --> NETS
+    POOL --> GENERATORS
     
-    subgraph OPERATORS["Geometric Operators"]
+    subgraph PARALLEL["Parallel Geometric Branches"]
         direction LR
-        subgraph CAY["Cayley Branch"]
-            A["A = uv^T−vu^T"] --> Q["Q = (I+βA/2)⁻¹(I−βA/2)"]
-            Q --> QX["Q·X_l"]
+        subgraph CAYLEY["Cayley (det = +1)"]
+            direction TB
+            A["A = uv<sup>T</sup> − vu<sup>T</sup>"]
+            Q["Q = (I + βA/2)<sup>−1</sup>(I − βA/2)"]
+            QX["Y<sub>C</sub> = QX<sub>l</sub>"]
+            A --> Q --> QX
         end
-        subgraph HOU["Householder Branch"]
-            KNORM["k = k̃/‖k̃‖"] --> H["H₂ = I−2kk^T"]
-            H --> HX["H₂·X_l"]
+        subgraph HOUSEHOLDER["Householder (det = −1)"]
+            direction TB
+            KNORM["k = k̃ / ‖k̃‖"]
+            H["H<sub>2</sub> = I − 2kk<sup>T</sup>"]
+            HX["Y<sub>H</sub> = H<sub>2</sub>X<sub>l</sub>"]
+            KNORM --> H --> HX
         end
     end
     
-    U & V --> A
+    U --> A
+    V --> A
     K --> KNORM
     BETA --> Q
-    X --> QX & HX
+    X --> QX
+    X --> HX
     
-    subgraph GATE["Thermodynamic Gate"]
-        GAMMA["γ = σ(W_γx̄·(1+φ))"]
+    subgraph GATING["Thermodynamic Gate"]
+        GAMMA["γ = σ(W<sub>γ</sub>x̄ · (1 + φ))"]
     end
     
     POOL --> GAMMA
     
-    subgraph BLEND[" "]
-        XGEO["X_geo = γ·Q·X + (1−γ)·H·X"]
+    subgraph FUSION["Geometric Fusion"]
+        XGEO["X<sub>geo</sub> = γ · Y<sub>C</sub> + (1 − γ) · Y<sub>H</sub>"]
     end
     
-    QX & HX & GAMMA --> XGEO
+    QX --> XGEO
+    HX --> XGEO
+    GAMMA --> XGEO
     
-    subgraph MHC["mHC Mappings"]
+    subgraph MHC["mHC Sub-layer"]
         direction LR
-        PRE["H_pre"] --> F["F(·)"] --> POST["H_post^T"]
+        PRE["H<sub>pre</sub>"] --> LN["LN"] --> FUNC["F(·)"] --> POST["H<sub>post</sub><sup>T</sup>"]
     end
     
-    XGEO --> MHC
+    XGEO --> PRE
     
-    OUT["X_{l+1} = X_geo + H_post^T·F(H_pre·LN(X_geo))"]
+    subgraph OUTPUT["Output"]
+        OUT["X<sub>l+1</sub> = X<sub>geo</sub> + H<sub>post</sub><sup>T</sup> F(H<sub>pre</sub> · LN(X<sub>geo</sub>))"]
+    end
     
-    XGEO & POST --> OUT
+    XGEO --> OUT
+    POST --> OUT
     
-    style CAY fill:#f5f5f5,stroke:#388e3c,stroke-width:2px
-    style HOU fill:#f5f5f5,stroke:#d32f2f,stroke-width:2px
-    style GATE fill:#fafafa,stroke:#7b1fa2,stroke-width:1px
-    style BLEND fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px
+    style CAYLEY fill:#f8f8f8,stroke:#2d5a2d,stroke-width:2px
+    style HOUSEHOLDER fill:#f8f8f8,stroke:#8b0000,stroke-width:2px
+    style GATING fill:#f8f8f8,stroke:#4a4a8a,stroke-width:1px
+    style FUSION fill:#f0f7f0,stroke:#2d5a2d,stroke-width:2px
 ```
 
-**Figure 2.** E∆-MHC-Geo Hybrid block architecture. Input X_l passes through parallel Cayley (det=+1, orthogonal ∀β) and Householder (det=−1, β=2 fixed) branches, combined via thermodynamic gate γ. The mHC mappings handle stream aggregation (H_pre) and broadcasting (H_post).
+**Figure 2.** E∆-MHC-Geo Hybrid block architecture. The input X_l is processed through parallel branches: (i) Cayley transform Q ∈ SO(n) with det(Q) = +1, unconditionally orthogonal; (ii) Householder reflection H₂ with det(H₂) = −1 and β = 2 fixed. The thermodynamic gate γ(X) ∈ (0,1) learns to blend branches based on input statistics. The mHC mappings (H_pre, H_post) provide multi-stream aggregation inherited from [2].
 
 #### Figure 3: Spectral Properties Comparison
 
 ```mermaid
-%%{init: {'theme': 'neutral', 'themeVariables': { 'fontSize': '12px'}}}%%
-flowchart TB
-    subgraph DDL["(a) DDL: H = I − βkk^T"]
-        D1["Eigenvalues: {1^{d-1}, 1−β}"]
-        D2["β=0: Identity | β=1: Singular | β=2: Reflection"]
-        D3["Orthogonal only at β∈{0,2}"]
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '10px', 'fontFamily': 'Times New Roman, serif', 'primaryTextColor': '#1a1a1a'}}}%%
+flowchart LR
+    subgraph DDL["(a) Householder / DDL"]
+        direction TB
+        D1["H<sub>β</sub> = I − βkk<sup>T</sup>"]
+        D2["σ(H) = {1<sup>(d−1)</sup>, 1−β}"]
+        D3["Orthogonal ⟺ β ∈ {0, 2}"]
+        D4["β = 2: λ = −1 (negation)"]
     end
     
-    subgraph CAY["(b) Cayley: Q = (I+βA/2)⁻¹(I−βA/2)"]
-        C1["λ_k = e^{−2i·arctan(βμ_k/2)}"]
-        C2["|λ_k|=1 ∀β → Always orthogonal"]
-        C3["det(Q)=+1, but λ=−1 unreachable"]
+    subgraph CAY["(b) Cayley Transform"]
+        direction TB
+        C1["Q = (I + βA/2)<sup>−1</sup>(I − βA/2)"]
+        C2["λ<sub>k</sub> = e<sup>−2i·arctan(βμ<sub>k</sub>/2)</sup>"]
+        C3["|λ<sub>k</sub>| = 1, ∀β ∈ ℝ"]
+        C4["det(Q) = +1, λ = −1 excluded"]
     end
     
     subgraph HYB["(c) E∆-MHC-Geo Hybrid"]
-        H1["γ→1: Cayley (det=+1)"]
-        H2["γ→0: Householder (det=−1)"]
-        H3["Orthogonal + Negation"]
+        direction TB
+        H1["G<sub>γ</sub> = γQ + (1−γ)H<sub>2</sub>"]
+        H2["γ → 1: rotation (det = +1)"]
+        H3["γ → 0: reflection (det = −1)"]
+        H4["Orthogonal ∧ Negation"]
     end
     
     DDL ~~~ CAY ~~~ HYB
     
-    style DDL fill:#fff8e1,stroke:#f57f17,stroke-width:1px
-    style CAY fill:#e3f2fd,stroke:#1976d2,stroke-width:1px
-    style HYB fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style DDL fill:#f8f8f8,stroke:#606060,stroke-width:1px
+    style CAY fill:#f8f8f8,stroke:#606060,stroke-width:1px
+    style HYB fill:#f0f7f0,stroke:#2d5a2d,stroke-width:2px
 ```
 
-**Figure 3.** Spectral analysis. (a) DDL orthogonal only at β∈{0,2}. (b) Cayley always orthogonal but cannot negate. (c) Hybrid achieves both via learned gate γ.
+| Operator | Orthogonality | Negation (λ = −1) | det | Condition |
+|:---------|:-------------:|:-----------------:|:---:|:----------|
+| Householder H_β | β ∈ {0, 2} | β = 2 | −1 | Conditional |
+| Cayley Q | ∀β | Never | +1 | Unconditional |
+| **E∆-MHC-Geo** | **∀γ (component-wise)** | **γ → 0** | **{−1, +1}** | **Learned** |
+
+**Figure 3.** Spectral analysis of geometric operators. (a) Householder/DDL achieves negation at β = 2 but loses orthogonality elsewhere. (b) Cayley is unconditionally orthogonal but eigenvalues exclude λ = −1. (c) The Hybrid combines both operators via learned gate γ, achieving orthogonality (per-component) with full eigenvalue coverage.
 
 #### Figure 4: Full E∆-MHC-Geo Transformer Architecture
 
-The E∆-MHC-Geo Transformer replaces the standard additive residual connection `X + F(X)` with the geometric operator $\mathcal{G}_\gamma$. Each transformer block applies the geometric operator **twice**: once before the attention sub-layer and once before the MLP sub-layer.
+The E∆-MHC-Geo Transformer replaces the standard additive residual connection $\mathbf{X} + F(\mathbf{X})$ with the geometric operator $\mathcal{G}_\gamma$. Each transformer block applies the geometric operator **twice**: once before the attention sub-layer and once before the MLP sub-layer.
 
 ```mermaid
-%%{init: {'theme': 'neutral', 'themeVariables': { 'fontSize': '11px'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '10px', 'fontFamily': 'Times New Roman, serif', 'primaryTextColor': '#1a1a1a', 'lineColor': '#404040'}}}%%
 flowchart TB
-    subgraph INPUT["Input Processing"]
-        TOK["Input Tokens<br/>[t₁,...,t_T]"] --> EMB["Token Embedding<br/>+ Positional Encoding"]
+    subgraph INPUT["Input"]
+        TOK["Tokens: [t<sub>1</sub>, ..., t<sub>T</sub>]"] --> EMB["Embedding + Position"]
     end
     
-    subgraph LAYER["E∆-MHC-Geo Block (×L layers)"]
+    subgraph BLOCK["E∆-MHC-Geo Block (×L)"]
         direction TB
         
-        subgraph ATTN_BLOCK["Attention Sub-Block"]
-            X1["X_l"] --> G1["G_γ = γ·Q(X)·X + (1−γ)·H₂(k)·X"]
-            G1 --> LN1["LayerNorm"]
-            LN1 --> PRE1["H_pre (aggregate)"]
-            PRE1 --> MHA["Multi-Head Attention"]
-            MHA --> POST1["H_post^T (broadcast)"]
+        subgraph ATTN["Attention Sub-layer"]
+            direction TB
+            X1["X<sub>l</sub>"] --> G1["G<sub>γ</sub>"]
+            G1 --> LN1["LN"]
+            LN1 --> PRE1["H<sub>pre</sub>"]
+            PRE1 --> MHA["Multi-Head<br/>Attention"]
+            MHA --> POST1["H<sub>post</sub><sup>T</sup>"]
             POST1 --> ADD1(("+"))
             G1 --> ADD1
         end
         
-        subgraph MLP_BLOCK["MLP Sub-Block"]
-            ADD1 --> G2["G_γ = γ·Q(X)·X + (1−γ)·H₂(k)·X"]
-            G2 --> LN2["LayerNorm"]
-            LN2 --> PRE2["H_pre"]
-            PRE2 --> FFN["FFN (4× expand, GELU)"]
-            FFN --> POST2["H_post^T"]
+        subgraph MLP["FFN Sub-layer"]
+            direction TB
+            ADD1 --> G2["G<sub>γ</sub>"]
+            G2 --> LN2["LN"]
+            LN2 --> PRE2["H<sub>pre</sub>"]
+            PRE2 --> FFN["FFN"]
+            FFN --> POST2["H<sub>post</sub><sup>T</sup>"]
             POST2 --> ADD2(("+"))
             G2 --> ADD2
         end
         
-        ADD2 --> OUT["X_{l+1}"]
+        ADD2 --> XOUT["X<sub>l+1</sub>"]
     end
     
-    subgraph OUTPUT["Output Processing"]
-        FINALLN["Final LayerNorm"] --> HEAD["Linear Projection"] --> LOGITS["Output Logits"]
+    subgraph OUTPUT["Output"]
+        FLN["LN"] --> HEAD["Linear"] --> OUT["Logits / Prediction"]
     end
     
     EMB --> X1
-    OUT --> |"×L"| FINALLN
+    XOUT --> |"repeat ×L"| FLN
     
-    style G1 fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
-    style G2 fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
-    style MHA fill:#e3f2fd,stroke:#1976d2,stroke-width:1px
-    style FFN fill:#fafafa,stroke:#616161,stroke-width:1px
+    style G1 fill:#f0f7f0,stroke:#2d5a2d,stroke-width:2px
+    style G2 fill:#f0f7f0,stroke:#2d5a2d,stroke-width:2px
+    style MHA fill:#f8f8f8,stroke:#404040,stroke-width:1px
+    style FFN fill:#f8f8f8,stroke:#404040,stroke-width:1px
 ```
 
-**Figure 4.** Full E∆-MHC-Geo Transformer architecture. Key differences from standard Transformer:
+$$\mathcal{G}_\gamma(\mathbf{X}) = \gamma(\mathbf{X}) \cdot \mathbf{Q}(\mathbf{X})\mathbf{X} + (1 - \gamma(\mathbf{X})) \cdot \mathbf{H}_2(\mathbf{k}(\mathbf{X}))\mathbf{X}$$
 
 | Component | Standard Transformer | E∆-MHC-Geo Transformer |
-|-----------|---------------------|------------------------|
-| Residual connection | `X + F(X)` (additive) | $\mathcal{G}_\gamma(\mathbf{X}) + \mathbf{H}_{\text{post}}^\top F(\cdot)$ |
-| Shortcut operator | Identity (det=1) | Cayley or Householder (det∈{−1,+1}) |
-| Stream handling | Single stream | n streams with H_pre/H_post aggregation |
-| Orthogonality | Not guaranteed | Guaranteed (per component) |
-| Negation capability | No | Yes (when γ→0) |
+|:----------|:--------------------:|:----------------------:|
+| Residual | X + F(X) | G_γ(X) + H_post^T F(·) |
+| Shortcut | Identity | Q or H₂ (learned) |
+| Orthogonality | — | Guaranteed |
+| det(shortcut) | +1 | {−1, +1} |
 
-The geometric operator $\mathcal{G}_\gamma$ (green boxes) applies before each sub-layer, providing input-adaptive orthogonal transformations. The mHC pre/post mappings (H_pre, H_post) handle multi-stream aggregation and broadcasting inherited from [2].
+**Figure 4.** Full E∆-MHC-Geo Transformer architecture. The geometric operator G_γ (green) replaces identity shortcuts, providing input-adaptive orthogonal transformations. H_pre/H_post mappings handle multi-stream aggregation per [2]. L = number of layers.
 
 #### Figure 5: Midpoint Collapse Regularization
 
 ```mermaid
-%%{init: {'theme': 'neutral', 'themeVariables': { 'fontSize': '12px'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '10px', 'fontFamily': 'Times New Roman, serif', 'primaryTextColor': '#1a1a1a'}}}%%
 flowchart LR
-    subgraph REG["ℒ_gate = 4γ(1−γ)"]
+    subgraph PENALTY["Gate Regularization: L<sub>gate</sub> = 4γ(1−γ)"]
         direction TB
-        G0["γ=0: Householder<br/>det=−1, orthogonal"]
-        G05["γ=0.5: Max penalty<br/>Non-orthogonal"]
-        G1["γ=1: Cayley<br/>det=+1, orthogonal"]
+        G0["γ = 0<br/>Householder<br/>det = −1"]
+        G05["γ = 0.5<br/>Maximum penalty<br/>Unstable blend"]
+        G1["γ = 1<br/>Cayley<br/>det = +1"]
     end
     
-    subgraph GRAD["Gradient Dynamics"]
+    subgraph DYNAMICS["Gradient Flow"]
         direction TB
-        GR["∂ℒ/∂γ = 4(1−2γ)"]
-        PUSH["γ<0.5 → pushes to 0<br/>γ>0.5 → pushes to 1"]
+        GR["∂L/∂γ = 4(1 − 2γ)"]
+        DIR["γ < 0.5 → pushed to 0<br/>γ > 0.5 → pushed to 1"]
     end
     
-    REG --> GRAD
+    PENALTY --> DYNAMICS
     
-    style G0 fill:#e8f5e9,stroke:#388e3c,stroke-width:1px
-    style G05 fill:#ffebee,stroke:#d32f2f,stroke-width:2px
-    style G1 fill:#e8f5e9,stroke:#388e3c,stroke-width:1px
+    style G0 fill:#f0f7f0,stroke:#2d5a2d,stroke-width:1px
+    style G05 fill:#f5f5f5,stroke:#8b0000,stroke-width:2px,stroke-dasharray:4 2
+    style G1 fill:#f0f7f0,stroke:#2d5a2d,stroke-width:1px
 ```
 
-$$\mathcal{L}_{\text{gate}} = 4\gamma(1-\gamma) \quad \Rightarrow \quad \gamma \to \{0, 1\}$$
+$$\mathcal{L}_{\text{gate}} = 4\gamma(1-\gamma), \quad \frac{\partial \mathcal{L}_{\text{gate}}}{\partial \gamma} = 4(1-2\gamma) \quad \Longrightarrow \quad \gamma \xrightarrow{\text{training}} \{0, 1\}$$
 
-**Figure 5.** Midpoint collapse regularization. The penalty is maximized at γ=0.5 (non-orthogonal), forcing binary gate decisions between rotation (γ=1) and reflection (γ=0).
+**Figure 5.** Midpoint collapse regularization. The penalty function $\mathcal{L}_{\text{gate}}$ is maximized at $\gamma = 0.5$ and minimized at the boundaries $\gamma \in \{0, 1\}$. This encourages the gate to make discrete decisions: $\gamma \to 0$ (Householder/reflection) or $\gamma \to 1$ (Cayley/rotation), ensuring orthogonality of the selected operator.
 
 #### Table 1: Method Comparison
 
@@ -1451,28 +1493,29 @@ We have presented:
 ### 11.3 Architecture Selection Guide
 
 ```mermaid
-%%{init: {'theme': 'neutral', 'themeVariables': { 'fontSize': '12px'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '10px', 'fontFamily': 'Times New Roman, serif', 'primaryTextColor': '#1a1a1a', 'lineColor': '#404040'}}}%%
 flowchart TB
-    Q["Task Type?"]
+    Q["Task Characteristics"]
     
-    Q --> T1["Geometric<br/>(SO(n), isometry)"]
-    Q --> T2["Negation<br/>(corrections)"]
-    Q --> T3["General<br/>(mixed/unknown)"]
+    Q --> T1["Requires SO(n)<br/>isometry preservation"]
+    Q --> T2["Requires negation<br/>correction signals"]
+    Q --> T3["Mixed / Unknown<br/>general purpose"]
     
-    T1 --> A1["E∆-MHC-Geo<br/>Pure Cayley"]
-    T2 --> A2["DDL<br/>Householder"]
-    T3 --> A3["E∆-MHC-Geo Hybrid<br/>(Recommended)"]
+    T1 --> A1["Cayley-only<br/>(E∆-MHC-Geo, γ=1)"]
+    T2 --> A2["Householder-only<br/>(DDL, β=2)"]
+    T3 --> A3["E∆-MHC-Geo Hybrid<br/>(learned γ)"]
     
-    style A3 fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+    style Q fill:#f8f8f8,stroke:#404040,stroke-width:1px
+    style A3 fill:#f0f7f0,stroke:#2d5a2d,stroke-width:2px
 ```
 
-| Task | Recommended | Reason |
-|------|-------------|--------|
-| Geometric reasoning | E∆-MHC-Geo | Unconditional orthogonality |
-| Negation/correction | DDL | Exact reflection at β=2 |
-| **General/mixed** | **E∆-MHC-Geo Hybrid** | **Both capabilities, learned** |
+| Task Domain | Recommended Architecture | Rationale |
+|:------------|:------------------------:|:----------|
+| Rotation estimation, pose | Cayley (γ = 1) | Unconditional SO(n) |
+| Error correction, negation | DDL (β = 2) | Exact reflection |
+| **General / mixed** | **E∆-MHC-Geo Hybrid** | **Learns task-adaptive γ** |
 
-**Figure 6.** Architecture selection based on task requirements. For most applications, the Hybrid is recommended.
+**Figure 6.** Architecture selection decision tree. For tasks with unknown or mixed requirements, the Hybrid architecture is recommended as it learns the optimal rotation-reflection balance from data.
 
 ### 11.4 Final Recommendation
 
