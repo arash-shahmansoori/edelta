@@ -1102,28 +1102,24 @@ $$\mathcal{G}_\gamma(\mathbf{X}) = \gamma(\mathbf{X}) \cdot \mathbf{Q}(\mathbf{X
 #### Figure 5: Midpoint Collapse Regularization
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '12px', 'fontFamily': 'Arial, Helvetica, sans-serif', 'primaryTextColor': '#000000'}}}%%
-flowchart LR
-    subgraph PENALTY["<b>Gate Regularization: L_gate = 4γ(1−γ)</b>"]
-        direction TB
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '16px', 'fontFamily': 'Arial', 'primaryTextColor': '#000000'}}}%%
+flowchart TB
+    subgraph REG["<b>Gate Regularization: L = 4γ(1−γ)</b>"]
+        direction LR
         G0["<b>γ = 0</b><br/>Householder<br/>det = −1"]
-        G05["<b>γ = 0.5</b><br/>Maximum penalty<br/>Zero gradient!"]
+        G05["<b>γ = 0.5</b><br/>Max penalty<br/>Zero gradient!"]
         G1["<b>γ = 1</b><br/>Cayley<br/>det = +1"]
     end
     
-    subgraph DYNAMICS["<b>Gradient Flow</b>"]
-        direction TB
-        GR["∂L/∂γ = 4(1 − 2γ)"]
-        DIR["γ < 0.5 → pushed to 0<br/>γ > 0.5 → pushed to 1<br/><b>γ = 0.5 → stuck!</b>"]
-    end
+    REG --> GRAD["<b>Gradient:</b> ∂L/∂γ = 4(1−2γ)"]
+    GRAD --> RES["γ < 0.5 → pushed to 0<br/>γ > 0.5 → pushed to 1<br/><b>γ = 0.5 → stuck!</b>"]
     
-    PENALTY --> DYNAMICS
-    
-    style G0 fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-    style G05 fill:#ffebee,stroke:#b71c1c,stroke-width:2px
-    style G1 fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
-    style PENALTY fill:#f5f5f5,stroke:#333333,stroke-width:1px
-    style DYNAMICS fill:#f5f5f5,stroke:#333333,stroke-width:1px
+    style G0 fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+    style G05 fill:#ffcdd2,stroke:#b71c1c,stroke-width:3px
+    style G1 fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+    style REG fill:#ffffff,stroke:#333333,stroke-width:2px
+    style GRAD fill:#ffffff,stroke:#333333,stroke-width:2px
+    style RES fill:#fff3e0,stroke:#e65100,stroke-width:2px
 ```
 
 $$\mathcal{L}_{\text{gate}} = 4\gamma(1-\gamma), \quad \frac{\partial \mathcal{L}_{\text{gate}}}{\partial \gamma} = 4(1-2\gamma) \quad \Longrightarrow \quad \gamma \xrightarrow{\text{training}} \{0, 1\}$$
