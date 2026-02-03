@@ -113,7 +113,8 @@ class EdeltaMHCGeoHybrid(nn.Module):
         d_model: int, 
         n_streams: int = 4, 
         init_gate_bias: float = 0.0,
-        gate_reg_weight: float = 0.1
+        gate_reg_weight: float = 0.1,
+        geo_hidden_ratio: int = 8
     ):
         super().__init__()
         assert d_model % n_streams == 0, f"d_model ({d_model}) must be divisible by n_streams ({n_streams})"
@@ -123,8 +124,10 @@ class EdeltaMHCGeoHybrid(nn.Module):
         self.d_stream = d_model // n_streams
         self.gate_reg_weight = gate_reg_weight
         
-        # Hidden dimension for generator networks (as in RESEARCH_V3.md Section 7.1)
-        hidden_dim = d_model // 4
+        # Hidden dimension for generator networks
+        # Default: n_embd // 8 for parameter parity with baselines
+        # (was n_embd // 4, which caused 50% more params)
+        hidden_dim = d_model // geo_hidden_ratio
         
         # === DATA-DEPENDENT CAYLEY ROTATION (Definition 2.1) ===
         # u(x) and v(x) are computed via 2-layer MLPs with GELU activation
@@ -524,37 +527,44 @@ class Block(nn.Module):
         init_gate_bias = getattr(config, 'init_gate_bias', 0.0)
         gate_reg_weight = getattr(config, 'gate_reg_weight', 0.1)
         
+        geo_hidden_ratio = getattr(config, 'geo_hidden_ratio', 8)
+        
         self.geo_attn = EdeltaMHCGeoHybrid(
             config.n_embd, 
             n_streams=self.n_streams, 
             init_gate_bias=init_gate_bias,
-            gate_reg_weight=gate_reg_weight
+            gate_reg_weight=gate_reg_weight,
+            geo_hidden_ratio=geo_hidden_ratio
         )
         self.geo_mlp = EdeltaMHCGeoHybrid(
             config.n_embd, 
             n_streams=self.n_streams, 
             init_gate_bias=init_gate_bias,
-            gate_reg_weight=gate_reg_weight
+            gate_reg_weight=gate_reg_weight,
+            geo_hidden_ratio=geo_hidden_ratio
         )
         
         # === mHC Pre/Post Mappings (RESEARCH_V3.md Section 7.2) ===
         # H_pre: Aggregates streams before layer function
         # H_post: Broadcasts layer output back to streams
-        # Identity-initialized for stable training start
+        # Can be disabled for fair parameter comparison (use_mhc_projections=False)
         
-        self.h_pre_attn = nn.Linear(config.n_embd, config.n_embd, bias=False)
-        self.h_post_attn = nn.Linear(config.n_embd, config.n_embd, bias=False)
-        self.h_pre_mlp = nn.Linear(config.n_embd, config.n_embd, bias=False)
-        self.h_post_mlp = nn.Linear(config.n_embd, config.n_embd, bias=False)
+        self.use_mhc_projections = getattr(config, 'use_mhc_projections', True)
         
-        self._init_pre_post_mappings()
+        if self.use_mhc_projections:
+            self.h_pre_attn = nn.Linear(config.n_embd, config.n_embd, bias=False)
+            self.h_post_attn = nn.Linear(config.n_embd, config.n_embd, bias=False)
+            self.h_pre_mlp = nn.Linear(config.n_embd, config.n_embd, bias=False)
+            self.h_post_mlp = nn.Linear(config.n_embd, config.n_embd, bias=False)
+            self._init_pre_post_mappings()
     
     def _init_pre_post_mappings(self):
         """Initialize pre/post mappings to identity for stable training."""
-        with torch.no_grad():
-            for layer in [self.h_pre_attn, self.h_post_attn, 
-                         self.h_pre_mlp, self.h_post_mlp]:
-                nn.init.eye_(layer.weight)
+        if self.use_mhc_projections:
+            with torch.no_grad():
+                for layer in [self.h_pre_attn, self.h_post_attn, 
+                             self.h_pre_mlp, self.h_post_mlp]:
+                    nn.init.eye_(layer.weight)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -562,6 +572,9 @@ class Block(nn.Module):
         
         Equation (RESEARCH_V3.md Section 7.4):
             X_{l+1} = G_γ(X_l) + H_postᵀ · F(H_pre · LN(G_γ(X_l)))
+        
+        When use_mhc_projections=False (fair param comparison):
+            X_{l+1} = G_γ(X_l) + F(LN(G_γ(X_l)))
         """
         # === ATTENTION SUB-BLOCK ===
         # Step 1: G_γ(X) - Geodesic hybrid transform
@@ -570,24 +583,33 @@ class Block(nn.Module):
         # Step 2: LN(G_γ(X))
         x_normed = self.ln_1(x_geo)
         
-        # Step 3: H_pre · LN(...)
-        x_pre = self.h_pre_attn(x_normed)
+        if self.use_mhc_projections:
+            # Step 3: H_pre · LN(...)
+            x_pre = self.h_pre_attn(x_normed)
+            # Step 4: F(H_pre · LN(...)) - Attention
+            attn_out = self.attn(x_pre)
+            # Step 5: H_postᵀ · F(...)
+            x_post = self.h_post_attn(attn_out)
+        else:
+            # Simplified: skip H_pre/H_post (identity)
+            attn_out = self.attn(x_normed)
+            x_post = attn_out
         
-        # Step 4: F(H_pre · LN(...)) - Attention
-        attn_out = self.attn(x_pre)
-        
-        # Step 5: H_postᵀ · F(...)
-        x_post = self.h_post_attn(attn_out)
-        
-        # Step 6: X_{l+1} = G_γ(X_l) + H_postᵀ · F(...)
+        # Step 6: X_{l+1} = G_γ(X_l) + ...
         x = x_geo + x_post
         
         # === MLP SUB-BLOCK ===
         x_geo = self.geo_mlp(x)
         x_normed = self.ln_2(x_geo)
-        x_pre = self.h_pre_mlp(x_normed)
-        mlp_out = self.mlp(x_pre)
-        x_post = self.h_post_mlp(mlp_out)
+        
+        if self.use_mhc_projections:
+            x_pre = self.h_pre_mlp(x_normed)
+            mlp_out = self.mlp(x_pre)
+            x_post = self.h_post_mlp(mlp_out)
+        else:
+            mlp_out = self.mlp(x_normed)
+            x_post = mlp_out
+        
         x = x_geo + x_post
         
         return x
@@ -616,6 +638,8 @@ class GPTConfig:
     n_streams: int = 4  # Number of streams for manifold operations
     init_gate_bias: float = 0.0  # 0=neutral, >0=prefer rotation, <0=prefer reflection
     gate_reg_weight: float = 0.1  # Weight for midpoint collapse regularization
+    geo_hidden_ratio: int = 8  # Hidden dim = n_embd // geo_hidden_ratio (8 for fair params)
+    use_mhc_projections: bool = True  # If False, skip h_pre/h_post for fair param comparison
 
 
 class GPT(nn.Module):

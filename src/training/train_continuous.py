@@ -179,18 +179,39 @@ def get_args():
     parser.add_argument('--init_gate_bias', type=float, default=0.0,
                         help='Initial gate bias (>0=prefer rotation, <0=prefer reflection)')
     
+    # Fair comparison mode
+    parser.add_argument('--fair_params', action='store_true',
+                        help='Adjust n_embd to ensure similar parameter counts across models')
+    
     return parser.parse_args()
 
 
 def create_model(args, input_dim: int, block_size: int):
-    """Create wrapped model based on model_type using existing implementations."""
+    """Create wrapped model based on model_type using existing implementations.
+    
+    When --fair_params is enabled, adjusts n_embd for E∆-MHC-Geo to ensure
+    similar parameter counts across models (E∆ uses n_embd=104 when baseline uses 128).
+    """
+    
+    # Fair parameter comparison mode:
+    # - Keeps n_embd the same for all models
+    # - For E∆-MHC-Geo: disables mHC projections and uses smaller geo hidden dim
+    # - Results in ~1.09x GPT params (vs 1.42x without fair mode)
+    n_embd = args.n_embd
+    use_mhc_projections = True
+    geo_hidden_ratio = 4  # Default: larger geo networks
+    
+    if args.fair_params and args.model_type == 'edelta':
+        use_mhc_projections = False  # Disable h_pre/h_post projections
+        geo_hidden_ratio = 8  # Smaller geo networks
+        print(f"\n[FAIR PARAMS] E∆-MHC-Geo: use_mhc_projections=False, geo_hidden_ratio=8")
     
     if args.model_type == 'gpt2':
         print(f"\n=== Standard GPT (Baseline) ===")
         config = BaselineConfig(
             n_layer=args.n_layer,
             n_head=args.n_head,
-            n_embd=args.n_embd,
+            n_embd=n_embd,
             dropout=args.dropout,
             bias=False,
             block_size=block_size,
@@ -204,7 +225,7 @@ def create_model(args, input_dim: int, block_size: int):
         config = DDLConfig(
             n_layer=args.n_layer,
             n_head=args.n_head,
-            n_embd=args.n_embd,
+            n_embd=n_embd,
             dropout=args.dropout,
             bias=False,
             block_size=block_size,
@@ -218,7 +239,7 @@ def create_model(args, input_dim: int, block_size: int):
         config = mHCConfig(
             n_layer=args.n_layer,
             n_head=args.n_head,
-            n_embd=args.n_embd,
+            n_embd=n_embd,
             n_streams=args.n_streams,
             dropout=args.dropout,
             bias=False,
@@ -233,17 +254,21 @@ def create_model(args, input_dim: int, block_size: int):
         print(f"\n=== E∆-MHC-Geo (Proposed) ===")
         print(f"  init_gate_bias: {args.init_gate_bias}")
         print(f"  gate_reg_weight: {args.gate_reg_weight}")
+        if args.fair_params:
+            print(f"  [FAIR PARAMS] use_mhc_projections=False, geo_hidden_ratio={geo_hidden_ratio}")
         config = EdeltaConfig(
             n_layer=args.n_layer,
             n_head=args.n_head,
-            n_embd=args.n_embd,
+            n_embd=n_embd,
             n_streams=args.n_streams,
             dropout=args.dropout,
             bias=False,
             block_size=block_size,
             vocab_size=1,
             gate_reg_weight=args.gate_reg_weight,
-            init_gate_bias=args.init_gate_bias,  # For ablation studies
+            init_gate_bias=args.init_gate_bias,
+            use_mhc_projections=use_mhc_projections,
+            geo_hidden_ratio=geo_hidden_ratio,
         )
         core = EdeltaGPT(config)
         
