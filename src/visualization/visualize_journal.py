@@ -562,9 +562,13 @@ def create_figure_4_reflection_aha_moment():
     # === Create figure ===
     fig, axes = plt.subplots(2, 2, figsize=(14, 11))
     
-    # (a) DDL β trajectory
+    # (a) DDL β trajectory with uncertainty band
     ax1 = axes[0, 0]
-    ax1.plot(ddl_traj['iter'], ddl_traj['beta_mean'], color=COLORS['DDL'], linewidth=2.5)
+    beta_mean = np.array(ddl_traj['beta_mean'])
+    beta_std = np.array(ddl_traj['beta_std'])
+    ax1.plot(ddl_traj['iter'], beta_mean, color=COLORS['DDL'], linewidth=2.5, label='β (mean)')
+    ax1.fill_between(ddl_traj['iter'], beta_mean - beta_std, beta_mean + beta_std,
+                     color=COLORS['DDL'], alpha=0.2, label='±1 std')
     ax1.axhline(y=2.0, color='gray', linestyle='--', linewidth=1.5, label='β = 2 (exact reflection)')
     ax1.set_xlabel('Training Iteration')
     ax1.set_ylabel('β Value', color=COLORS['DDL'])
@@ -572,9 +576,13 @@ def create_figure_4_reflection_aha_moment():
     ax1.set_ylim(0.8, 2.2)
     ax1.legend(loc='lower right')
     
-    # (b) E∆-MHC-Geo γ trajectory
+    # (b) E∆-MHC-Geo γ trajectory with uncertainty band
     ax2 = axes[0, 1]
-    ax2.plot(hybrid_traj['iter'], hybrid_traj['gate_mean'], color=COLORS['E∆-MHC-Geo'], linewidth=2.5)
+    gate_mean = np.array(hybrid_traj['gate_mean'])
+    gate_std = np.array(hybrid_traj['gate_std'])
+    ax2.plot(hybrid_traj['iter'], gate_mean, color=COLORS['E∆-MHC-Geo'], linewidth=2.5, label='γ (mean)')
+    ax2.fill_between(hybrid_traj['iter'], gate_mean - gate_std, gate_mean + gate_std,
+                     color=COLORS['E∆-MHC-Geo'], alpha=0.2, label='±1 std')
     ax2.axhline(y=0.0, color='gray', linestyle='--', linewidth=1.5, label='γ = 0 (Householder)')
     ax2.set_xlabel('Training Iteration')
     ax2.set_ylabel('Gate Value (γ)', color=COLORS['E∆-MHC-Geo'])
