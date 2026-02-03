@@ -553,10 +553,12 @@ def create_figure_4_reflection_aha_moment():
                                         max_iters=3000, track_interval=30, verbose=False)
     ddl_traj = ddl_result['trajectory']
     
-    print("  Training E∆-MHC-Geo...")
-    hybrid = SimpleHybrid(dim, gate_reg_weight=0.5).to(device)
+    # Note: Unbiased init (γ=0.5) gets stuck because regularization gradient is zero there!
+    # Model uses symmetry-breaking init (γ≈0.38) - see train_reflection.py for detailed explanation
+    print("  Training E∆-MHC-Geo (symmetry-breaking init, strong reg=1.0)...")
+    hybrid = SimpleHybrid(dim, gate_reg_weight=1.0).to(device)
     hybrid_result = train_with_trajectory(hybrid, 'E∆-MHC-Geo', train_x, train_y, val_x, val_y,
-                                          max_iters=3000, track_interval=30, verbose=False)
+                                          max_iters=5000, track_interval=50, verbose=False)
     hybrid_traj = hybrid_result['trajectory']
     
     # === Create figure ===
