@@ -527,6 +527,102 @@ def create_figure_4_comprehensive():
     plt.close()
 
 
+def create_figure_4_reflection_aha_moment():
+    """
+    Figure 4: Reflection Experiment "Aha!" Moment Visualization
+    Following arXiv:2601.00514v1 "Illusion of Insight" methodology.
+    
+    Uses the proper model implementations from train_reflection.py to ensure
+    correct parameter convergence (DDL β→2, E∆-MHC-Geo γ→0).
+    """
+    # Import models and utilities from train_reflection.py
+    from src.training.train_reflection import SimpleDDL, SimpleHybrid, train_with_trajectory
+    from src.data.reflection import generate_negation_data
+    
+    # === Run experiment ===
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    dim, n_samples = 64, 500
+    
+    torch.manual_seed(42)
+    train_x, train_y = generate_negation_data(n_samples, dim, device)
+    val_x, val_y = generate_negation_data(500, dim, device)
+    
+    print("  Training DDL...")
+    ddl = SimpleDDL(dim).to(device)
+    ddl_result = train_with_trajectory(ddl, 'DDL', train_x, train_y, val_x, val_y, 
+                                        max_iters=2000, track_interval=20, verbose=False)
+    ddl_traj = ddl_result['trajectory']
+    
+    print("  Training E∆-MHC-Geo...")
+    hybrid = SimpleHybrid(dim).to(device)
+    hybrid_result = train_with_trajectory(hybrid, 'E∆-MHC-Geo', train_x, train_y, val_x, val_y,
+                                          max_iters=2000, track_interval=20, verbose=False)
+    hybrid_traj = hybrid_result['trajectory']
+    
+    # === Create figure ===
+    fig, axes = plt.subplots(2, 2, figsize=(14, 11))
+    
+    # (a) DDL β trajectory
+    ax1 = axes[0, 0]
+    ax1.plot(ddl_traj['iter'], ddl_traj['beta_mean'], color=COLORS['DDL'], linewidth=2.5)
+    ax1.axhline(y=2.0, color='gray', linestyle='--', linewidth=1.5, label='β = 2 (exact reflection)')
+    ax1.set_xlabel('Training Iteration')
+    ax1.set_ylabel('β Value', color=COLORS['DDL'])
+    ax1.set_title('(a) DDL: β Trajectory (500 samples)', fontweight='bold')
+    ax1.set_ylim(0.8, 2.2)
+    ax1.legend(loc='lower right')
+    
+    # (b) E∆-MHC-Geo γ trajectory
+    ax2 = axes[0, 1]
+    ax2.plot(hybrid_traj['iter'], hybrid_traj['gate_mean'], color=COLORS['E∆-MHC-Geo'], linewidth=2.5)
+    ax2.axhline(y=0.0, color='gray', linestyle='--', linewidth=1.5, label='γ = 0 (Householder)')
+    ax2.set_xlabel('Training Iteration')
+    ax2.set_ylabel('Gate Value (γ)', color=COLORS['E∆-MHC-Geo'])
+    ax2.set_title('(b) E∆-MHC-Geo: Gate Trajectory (500 samples)', fontweight='bold')
+    ax2.legend(loc='upper right')
+    
+    # (c) DDL: Accuracy vs β scatter - THE "AHA!" MOMENT
+    ax3 = axes[1, 0]
+    sc1 = ax3.scatter(ddl_traj['beta_mean'], ddl_traj['negation_accuracy'],
+                     c=ddl_traj['iter'], cmap='plasma', s=60, alpha=0.85, edgecolors='white', linewidths=0.5)
+    ax3.axvline(x=2.0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
+    ax3.axhline(y=0.95, color='#27AE60', linestyle=':', linewidth=1.5, alpha=0.8)
+    ax3.set_xlabel('β Value')
+    ax3.set_ylabel('Negation Accuracy')
+    ax3.set_title('(c) DDL: Accuracy vs β ("Aha!" Moment)', fontweight='bold')
+    ax3.set_xlim(0.8, 2.15)
+    plt.colorbar(sc1, ax=ax3, label='Iteration')
+    
+    # (d) E∆-MHC-Geo: Accuracy vs γ scatter - THE "AHA!" MOMENT
+    ax4 = axes[1, 1]
+    sc2 = ax4.scatter(hybrid_traj['gate_mean'], hybrid_traj['negation_accuracy'],
+                     c=hybrid_traj['iter'], cmap='plasma', s=60, alpha=0.85, edgecolors='white', linewidths=0.5)
+    ax4.axvline(x=0.0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
+    ax4.axhline(y=0.95, color='#27AE60', linestyle=':', linewidth=1.5, alpha=0.8)
+    ax4.set_xlabel('Gate Value (γ)')
+    ax4.set_ylabel('Negation Accuracy')
+    ax4.set_title('(d) E∆-MHC-Geo: Accuracy vs γ ("Aha!" Moment)', fontweight='bold')
+    plt.colorbar(sc2, ax=ax4, label='Iteration')
+    
+    fig.suptitle('Reflection Experiment: "Aha!" Moment Visualization\n'
+                '(Following arXiv:2601.00514v1 "Illusion of Insight" Methodology)',
+                fontsize=14, fontweight='bold', y=0.98)
+    
+    plt.tight_layout(rect=[0, 0, 1, 0.95])
+    plt.savefig('results/reflection_aha_moment.png', dpi=300, bbox_inches='tight', 
+                facecolor='white', edgecolor='none')
+    print("  Saved: results/reflection_aha_moment.png")
+    
+    # Also save to assets
+    plt.savefig('assets/reflection_aha_moment.png', dpi=300, bbox_inches='tight',
+                facecolor='white', edgecolor='none')
+    print("  Saved: assets/reflection_aha_moment.png")
+    plt.close()
+    
+    # Print results
+    print(f"  Results: DDL β={ddl_traj['beta_mean'][-1]:.4f}, E∆ γ={hybrid_traj['gate_mean'][-1]:.4f}")
+
+
 def create_all_figures():
     """Generate all publication figures."""
     print("=" * 60)
@@ -546,7 +642,11 @@ def create_all_figures():
     print("\nCreating Figure 3: Performance Comparison...")
     create_figure_3_ablation()
     
-    # Figure 4 removed - redundant with Figures 1 and 3
+    print("\nCreating Figure 4: Reflection 'Aha!' Moment...")
+    try:
+        create_figure_4_reflection_aha_moment()
+    except Exception as e:
+        print(f"  Error: {e}")
     
     print("\n" + "=" * 60)
     print("All figures saved at 300 DPI!")
