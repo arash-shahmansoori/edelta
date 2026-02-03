@@ -1004,7 +1004,7 @@ flowchart TB
     X --> HX
     
     subgraph GATING["<b>Thermodynamic Gate</b>"]
-        GAMMA["γ = σ(W_γ·x̄ · (1 + φ))"]
+        GAMMA["γ = σ((W_γ·x̄ + b_γ)·(1 + φ))"]
     end
     
     POOL --> GAMMA
@@ -1019,10 +1019,10 @@ flowchart TB
     
     subgraph MHC["<b>mHC Sub-layer</b>"]
         direction LR
-        PRE["H_pre"] --> LN["LN"] --> FUNC["F(·)"] --> POST["H_post^T"]
+        LN["LN"] --> PRE["H_pre"] --> FUNC["F(·)"] --> POST["H_post^T"]
     end
     
-    XGEO --> PRE
+    XGEO --> LN
     
     subgraph OUTPUT["<b>Output</b>"]
         OUT["X_l+1 = X_geo + H_post^T·F(H_pre·LN(X_geo))"]
