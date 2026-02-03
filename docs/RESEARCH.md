@@ -1044,34 +1044,18 @@ flowchart TB
 #### Figure 3: Spectral Properties Comparison
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '14px', 'fontFamily': 'Arial, sans-serif', 'primaryTextColor': '#000000', 'lineColor': '#000000'}}}%%
-flowchart LR
-    subgraph DDL["(a) Householder/DDL"]
-        direction TB
-        D1["H_β = I − βkk^T"]
-        D2["Orthogonal ⟺ β ∈ {0,2}"]
-        D3["β=2: λ=−1 ✓"]
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '13px', 'fontFamily': 'Arial', 'primaryTextColor': '#000'}}}%%
+flowchart TB
+    subgraph TOP[" "]
+        direction LR
+        DDL["(a) Householder<br/>β=2: λ=−1 ✓<br/>Orth: conditional"]
+        CAY["(b) Cayley<br/>|λ|=1 ∀β ✓<br/>λ=−1: never ✗"]
     end
-    
-    subgraph CAY["(b) Cayley"]
-        direction TB
-        C1["Q = Cayley(A,β)"]
-        C2["|λ|=1 always ✓"]
-        C3["λ=−1 never ✗"]
-    end
-    
-    subgraph HYB["(c) E∆-MHC-Geo"]
-        direction TB
-        H1["G = γQ + (1−γ)H₂"]
-        H2["γ→1: rotation"]
-        H3["γ→0: reflection"]
-    end
-    
-    DDL ~~~ CAY ~~~ HYB
-    
-    style DDL fill:#f5f5f5,stroke:#333333,stroke-width:2px
-    style CAY fill:#f5f5f5,stroke:#333333,stroke-width:2px
-    style HYB fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px
+    DDL & CAY --> HYB["(c) E∆-MHC-Geo: G = γQ + (1−γ)H₂<br/>Orthogonal ∧ Negation ✓"]
+    style DDL fill:#f5f5f5,stroke:#333
+    style CAY fill:#f5f5f5,stroke:#333
+    style HYB fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+    style TOP fill:none,stroke:none
 ```
 
 | Operator | Orthogonality | Negation (λ = −1) | det | Condition |
@@ -1087,37 +1071,21 @@ flowchart LR
 The E∆-MHC-Geo Transformer replaces the standard additive residual connection $\mathbf{X} + F(\mathbf{X})$ with the geometric operator $\mathcal{G}_\gamma$. Each transformer block applies the geometric operator **twice**: once before the attention sub-layer and once before the MLP sub-layer.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '14px', 'fontFamily': 'Arial, sans-serif', 'primaryTextColor': '#000000', 'lineColor': '#000000'}}}%%
-flowchart LR
-    subgraph IN["Input"]
-        T["Tokens"] --> E["Embed+Pos"]
-    end
-    
-    subgraph BLK["E∆-MHC-Geo Block ×L"]
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '13px', 'fontFamily': 'Arial', 'primaryTextColor': '#000'}}}%%
+flowchart TB
+    IN[["Embed + Pos"]] --> BLK
+    subgraph BLK["×L Blocks"]
         direction TB
-        X["X_l"] --> GA["G_γ"]
-        GA --> A["LN → Attn"]
-        A --> HA["+H^T"]
-        HA --> GB["G_γ"]
-        GB --> F["LN → FFN"]
-        F --> HB["+H^T"]
-        HB --> Y["X_l+1"]
+        G1["G_γ"] --> LN1["LN→Attn"] --> R1((+))
+        G1 --> R1
+        R1 --> G2["G_γ"] --> LN2["LN→FFN"] --> R2((+))
+        G2 --> R2
     end
-    
-    subgraph OUT["Output"]
-        L["LN"] --> P["Linear"]
-    end
-    
-    E --> X
-    Y -->|"×L"| L
-    
-    style GA fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px
-    style GB fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px
-    style A fill:#f5f5f5,stroke:#333333,stroke-width:1px
-    style F fill:#f5f5f5,stroke:#333333,stroke-width:1px
-    style IN fill:#f5f5f5,stroke:#333333,stroke-width:2px
-    style OUT fill:#f5f5f5,stroke:#333333,stroke-width:2px
-    style BLK fill:#fafafa,stroke:#333333,stroke-width:2px
+    BLK --> OUT[["LN → Head"]]
+    style G1 fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+    style G2 fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+    style IN fill:#e3f2fd,stroke:#1565c0
+    style OUT fill:#e3f2fd,stroke:#1565c0
 ```
 
 $$\mathcal{G}_\gamma(\mathbf{X}) = \gamma(\mathbf{X}) \cdot \mathbf{Q}(\mathbf{X})\mathbf{X} + (1 - \gamma(\mathbf{X})) \cdot \mathbf{H}_2(\mathbf{k}(\mathbf{X}))\mathbf{X}$$
