@@ -216,10 +216,16 @@ def create_figure_2_stability_analysis():
         saved_config = checkpoint['config']
         model_type = saved_config['model_type']
         
+        # Detect actual n_layer from state_dict (may differ from config due to parameter matching)
+        layers = set()
+        block_size = 128  # default
         for k, v in checkpoint['model'].items():
             if 'pos_emb' in k:
                 block_size = v.shape[1]
-                break
+            if '.h.' in k:
+                layer_num = k.split('.h.')[1].split('.')[0]
+                layers.add(int(layer_num))
+        actual_n_layer = max(layers) + 1 if layers else saved_config['n_layer']
         
         model_map = {
             'gpt2': (BaselineGPT, BaselineConfig),
@@ -230,7 +236,7 @@ def create_figure_2_stability_analysis():
         
         GPTClass, ConfigClass = model_map[model_type]
         config_args = {
-            'n_layer': saved_config['n_layer'],
+            'n_layer': actual_n_layer,  # Use actual layer count from state_dict
             'n_head': saved_config['n_head'],
             'n_embd': saved_config['n_embd'],
             'dropout': saved_config['dropout'],
