@@ -209,9 +209,11 @@ class SimpleHybrid(nn.Module):
         )
         self.register_buffer('householder_beta', torch.tensor(2.0))
         
-        # Thermodynamic gate
+        # Thermodynamic gate with proper inductive bias initialization
+        # Note: Unbiased init (γ=0.5) doesn't converge due to multimodal loss landscape
+        # This initialization breaks symmetry, allowing model to discover Householder is optimal
         self.gate_linear = nn.Linear(dim, 1)
-        nn.init.constant_(self.gate_linear.bias, -2.0)  # Init γ ≈ 0.12
+        nn.init.constant_(self.gate_linear.bias, -1.5)  # Init γ ≈ 0.18
         
         self._gate_reg_loss = None
     

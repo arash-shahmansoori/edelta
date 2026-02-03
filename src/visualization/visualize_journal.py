@@ -550,13 +550,13 @@ def create_figure_4_reflection_aha_moment():
     print("  Training DDL...")
     ddl = SimpleDDL(dim).to(device)
     ddl_result = train_with_trajectory(ddl, 'DDL', train_x, train_y, val_x, val_y, 
-                                        max_iters=2000, track_interval=20, verbose=False)
+                                        max_iters=3000, track_interval=30, verbose=False)
     ddl_traj = ddl_result['trajectory']
     
     print("  Training E∆-MHC-Geo...")
-    hybrid = SimpleHybrid(dim).to(device)
+    hybrid = SimpleHybrid(dim, gate_reg_weight=0.5).to(device)
     hybrid_result = train_with_trajectory(hybrid, 'E∆-MHC-Geo', train_x, train_y, val_x, val_y,
-                                          max_iters=2000, track_interval=20, verbose=False)
+                                          max_iters=3000, track_interval=30, verbose=False)
     hybrid_traj = hybrid_result['trajectory']
     
     # === Create figure ===
