@@ -1102,24 +1102,15 @@ $$\mathcal{G}_\gamma(\mathbf{X}) = \gamma(\mathbf{X}) \cdot \mathbf{Q}(\mathbf{X
 #### Figure 5: Midpoint Collapse Regularization
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '16px', 'fontFamily': 'Arial', 'primaryTextColor': '#000000'}}}%%
-flowchart TB
-    subgraph REG["<b>Gate Regularization: L = 4γ(1−γ)</b>"]
-        direction LR
-        G0["<b>γ = 0</b><br/>Householder<br/>det = −1"]
-        G05["<b>γ = 0.5</b><br/>Max penalty<br/>Zero gradient!"]
-        G1["<b>γ = 1</b><br/>Cayley<br/>det = +1"]
-    end
-    
-    REG --> GRAD["<b>Gradient:</b> ∂L/∂γ = 4(1−2γ)"]
-    GRAD --> RES["γ < 0.5 → pushed to 0<br/>γ > 0.5 → pushed to 1<br/><b>γ = 0.5 → stuck!</b>"]
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '15px', 'fontFamily': 'Arial', 'primaryTextColor': '#000'}}}%%
+flowchart LR
+    G0["γ=0<br/>Householder"] --- G05["γ=0.5<br/>STUCK"] --- G1["γ=1<br/>Cayley"]
+    G05 --> OUT["∂L/∂γ = 0<br/>No escape!"]
     
     style G0 fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
-    style G05 fill:#ffcdd2,stroke:#b71c1c,stroke-width:3px
+    style G05 fill:#ffcdd2,stroke:#c62828,stroke-width:3px
     style G1 fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
-    style REG fill:#ffffff,stroke:#333333,stroke-width:2px
-    style GRAD fill:#ffffff,stroke:#333333,stroke-width:2px
-    style RES fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style OUT fill:#fff3e0,stroke:#e65100,stroke-width:2px
 ```
 
 $$\mathcal{L}_{\text{gate}} = 4\gamma(1-\gamma), \quad \frac{\partial \mathcal{L}_{\text{gate}}}{\partial \gamma} = 4(1-2\gamma) \quad \Longrightarrow \quad \gamma \xrightarrow{\text{training}} \{0, 1\}$$
