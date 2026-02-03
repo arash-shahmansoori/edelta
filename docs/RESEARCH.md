@@ -3,7 +3,7 @@
 **Author:** Arash Shahmansoori  
 **Affiliation:** Independent Researcher  
 **Contact:** arash.mansoori65@gmail.com  
-**Date:** January 2026  
+**Date:** February 2026  
 **Version:** 3.5 (Complete with Detailed Experimental Analysis)
 
 ---
@@ -52,45 +52,39 @@ This unified architecture achieves:
 ### Figure 1: Comparison of Residual Connection Paradigms
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ffffff', 'primaryTextColor': '#1a1a1a', 'primaryBorderColor': '#404040', 'lineColor': '#404040', 'fontSize': '11px', 'fontFamily': 'Times New Roman, serif'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#333333', 'lineColor': '#333333', 'fontSize': '13px', 'fontFamily': 'Arial, Helvetica, sans-serif'}}}%%
 flowchart LR
-    subgraph A[" "]
+    subgraph A["<b>(a) Standard Residual</b>"]
         direction TB
-        A0["<b>(a) Standard Residual</b>"]
-        A1["X<sub>l</sub>"] --> A2["F(·)"]
+        A1["X_l"] --> A2["F(·)"]
         A1 --> A3(("+"))
         A2 --> A3
-        A3 --> A4["X<sub>l+1</sub> = X + F(X)"]
+        A3 --> A4["X_l+1 = X + F(X)"]
     end
     
-    subgraph B[" "]
+    subgraph B["<b>(b) DDL</b>"]
         direction TB
-        B0["<b>(b) DDL</b>"]
-        B1["X<sub>l</sub>"] --> B2["H<sub>β</sub> = I − βkk<sup>T</sup>"]
-        B1 --> B3["βkv<sup>T</sup>"]
+        B1["X_l"] --> B2["H_β = I − βkk^T"]
+        B1 --> B3["βkv^T"]
         B2 --> B4(("+"))
         B3 --> B4
-        B4 --> B5["X<sub>l+1</sub> = HX + βkv<sup>T</sup>"]
+        B4 --> B5["X_l+1 = HX + βkv^T"]
     end
     
-    subgraph C[" "]
+    subgraph C["<b>(c) E∆-MHC-Geo</b>"]
         direction TB
-        C0["<b>(c) E∆-MHC-Geo</b>"]
-        C1["X<sub>l</sub>"] --> C2["Q(X) ∈ SO(n)"]
-        C1 --> C3["H<sub>2</sub>(k)"]
+        C1["X_l"] --> C2["Q(X) ∈ SO(n)"]
+        C1 --> C3["H_2(k)"]
         C2 --> C5(("γ"))
         C3 --> C5
-        C5 --> C6["X<sub>l+1</sub> = γQX + (1−γ)HX"]
+        C5 --> C6["X_l+1 = γQX + (1−γ)HX"]
     end
     
     A ~~~ B ~~~ C
     
-    style A fill:#f8f8f8,stroke:#606060,stroke-width:1px
-    style B fill:#f8f8f8,stroke:#606060,stroke-width:1px
-    style C fill:#f0f7f0,stroke:#2d5a2d,stroke-width:2px
-    style A0 fill:none,stroke:none
-    style B0 fill:none,stroke:none
-    style C0 fill:none,stroke:none
+    style A fill:#f5f5f5,stroke:#333333,stroke-width:2px
+    style B fill:#f5f5f5,stroke:#333333,stroke-width:2px
+    style C fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
 ```
 
 | Property | Standard | DDL | E∆-MHC-Geo |
@@ -449,27 +443,14 @@ This is impossible for any finite $\beta$ and $\mu_k$. **QED.**
 - Negation requires $\lambda = -1 = e^{i\pi}$, but $\pm\pi$ is the excluded boundary
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '10px', 'fontFamily': 'Times New Roman, serif', 'primaryTextColor': '#1a1a1a'}}}%%
-flowchart TB
-    subgraph UNIT["Cayley Eigenvalue Distribution on S¹"]
-        direction LR
-        subgraph LEFT[" "]
-            L1["λ = e<sup>iθ</sup>"]
-            L2["θ = −2arctan(βμ/2)"]
-        end
-        subgraph CENTER[" "]
-            C1["<b>θ = π : EXCLUDED</b>"]
-            C2["λ = −1 unreachable"]
-        end
-        subgraph RIGHT[" "]
-            R1["Reachable: θ ∈ (−π, π)"]
-            R2["Full rotation except π"]
-        end
-    end
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '13px', 'fontFamily': 'Arial, Helvetica, sans-serif', 'primaryTextColor': '#000000'}}}%%
+flowchart LR
+    A["<b>Eigenvalue Form</b><br/>λ = exp(iθ)<br/>θ = −2arctan(βμ/2)"] --> B["<b>EXCLUDED</b><br/>θ = π<br/>λ = −1 unreachable"]
+    B --> C["<b>Reachable</b><br/>θ ∈ (−π, π)<br/>Full S¹ except π"]
     
-    style CENTER fill:#f5f5f5,stroke:#8b0000,stroke-width:2px,stroke-dasharray:4 2
-    style LEFT fill:#f8f8f8,stroke:#404040,stroke-width:1px
-    style RIGHT fill:#f0f7f0,stroke:#2d5a2d,stroke-width:1px
+    style A fill:#f5f5f5,stroke:#333333,stroke-width:2px
+    style B fill:#ffebee,stroke:#b71c1c,stroke-width:2px
+    style C fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
 ```
 
 $$\lambda_k = e^{-2i\arctan(\beta\mu_k/2)}, \quad \arctan: \mathbb{R} \to \left(-\frac{\pi}{2}, \frac{\pi}{2}\right) \implies \arg(\lambda) \in (-\pi, \pi) \text{ (open)}$$
@@ -982,35 +963,35 @@ where $\mathcal{G}_\gamma(\mathbf{X}) = \gamma \cdot \mathbf{Q}(\mathbf{X})\math
 #### Figure 2: E∆-MHC-Geo Hybrid Block Architecture
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '10px', 'fontFamily': 'Times New Roman, serif', 'primaryTextColor': '#1a1a1a', 'lineColor': '#404040'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '12px', 'fontFamily': 'Arial, Helvetica, sans-serif', 'primaryTextColor': '#000000', 'lineColor': '#333333'}}}%%
 flowchart TB
-    subgraph INPUT["Input"]
-        X["X<sub>l</sub> ∈ ℝ<sup>B×S×D</sup>"]
+    subgraph INPUT["<b>Input</b>"]
+        X["X_l ∈ R^(B×S×D)"]
     end
     
-    X --> POOL["x̄ = MeanPool(X<sub>l</sub>)"]
+    X --> POOL["x̄ = MeanPool(X_l)"]
     
-    subgraph GENERATORS["Parameter Generators"]
+    subgraph GENERATORS["<b>Parameter Generators</b>"]
         direction LR
-        U["u = f<sub>u</sub>(x̄)"] ~~~ V["v = f<sub>v</sub>(x̄)"] ~~~ K["k̃ = f<sub>k</sub>(x̄)"] ~~~ BETA["β = f<sub>β</sub>(x̄)"]
+        U["u = f_u(x̄)"] ~~~ V["v = f_v(x̄)"] ~~~ K["k̃ = f_k(x̄)"] ~~~ BETA["β = f_β(x̄)"]
     end
     
     POOL --> GENERATORS
     
-    subgraph PARALLEL["Parallel Geometric Branches"]
+    subgraph PARALLEL["<b>Parallel Geometric Branches</b>"]
         direction LR
-        subgraph CAYLEY["Cayley (det = +1)"]
+        subgraph CAYLEY["<b>Cayley (det = +1)</b>"]
             direction TB
-            A["A = uv<sup>T</sup> − vu<sup>T</sup>"]
-            Q["Q = (I + βA/2)<sup>−1</sup>(I − βA/2)"]
-            QX["Y<sub>C</sub> = QX<sub>l</sub>"]
+            A["A = uv^T − vu^T"]
+            Q["Q = (I + βA/2)^−1(I − βA/2)"]
+            QX["Y_C = QX_l"]
             A --> Q --> QX
         end
-        subgraph HOUSEHOLDER["Householder (det = −1)"]
+        subgraph HOUSEHOLDER["<b>Householder (det = −1)</b>"]
             direction TB
-            KNORM["k = k̃ / ‖k̃‖"]
-            H["H<sub>2</sub> = I − 2kk<sup>T</sup>"]
-            HX["Y<sub>H</sub> = H<sub>2</sub>X<sub>l</sub>"]
+            KNORM["k = k̃ / ||k̃||"]
+            H["H_2 = I − 2kk^T"]
+            HX["Y_H = H_2·X_l"]
             KNORM --> H --> HX
         end
     end
@@ -1022,38 +1003,40 @@ flowchart TB
     X --> QX
     X --> HX
     
-    subgraph GATING["Thermodynamic Gate"]
-        GAMMA["γ = σ(W<sub>γ</sub>x̄ · (1 + φ))"]
+    subgraph GATING["<b>Thermodynamic Gate</b>"]
+        GAMMA["γ = σ(W_γ·x̄ · (1 + φ))"]
     end
     
     POOL --> GAMMA
     
-    subgraph FUSION["Geometric Fusion"]
-        XGEO["X<sub>geo</sub> = γ · Y<sub>C</sub> + (1 − γ) · Y<sub>H</sub>"]
+    subgraph FUSION["<b>Geometric Fusion</b>"]
+        XGEO["X_geo = γ·Y_C + (1−γ)·Y_H"]
     end
     
     QX --> XGEO
     HX --> XGEO
     GAMMA --> XGEO
     
-    subgraph MHC["mHC Sub-layer"]
+    subgraph MHC["<b>mHC Sub-layer</b>"]
         direction LR
-        PRE["H<sub>pre</sub>"] --> LN["LN"] --> FUNC["F(·)"] --> POST["H<sub>post</sub><sup>T</sup>"]
+        PRE["H_pre"] --> LN["LN"] --> FUNC["F(·)"] --> POST["H_post^T"]
     end
     
     XGEO --> PRE
     
-    subgraph OUTPUT["Output"]
-        OUT["X<sub>l+1</sub> = X<sub>geo</sub> + H<sub>post</sub><sup>T</sup> F(H<sub>pre</sub> · LN(X<sub>geo</sub>))"]
+    subgraph OUTPUT["<b>Output</b>"]
+        OUT["X_l+1 = X_geo + H_post^T·F(H_pre·LN(X_geo))"]
     end
     
     XGEO --> OUT
     POST --> OUT
     
-    style CAYLEY fill:#f8f8f8,stroke:#2d5a2d,stroke-width:2px
-    style HOUSEHOLDER fill:#f8f8f8,stroke:#8b0000,stroke-width:2px
-    style GATING fill:#f8f8f8,stroke:#4a4a8a,stroke-width:1px
-    style FUSION fill:#f0f7f0,stroke:#2d5a2d,stroke-width:2px
+    style CAYLEY fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style HOUSEHOLDER fill:#ffebee,stroke:#b71c1c,stroke-width:2px
+    style GATING fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style FUSION fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style INPUT fill:#f5f5f5,stroke:#333333,stroke-width:1px
+    style OUTPUT fill:#f5f5f5,stroke:#333333,stroke-width:1px
 ```
 
 **Figure 2.** E∆-MHC-Geo Hybrid block architecture. The input X_l is processed through parallel branches: (i) Cayley transform Q ∈ SO(n) with det(Q) = +1, unconditionally orthogonal; (ii) Householder reflection H₂ with det(H₂) = −1 and β = 2 fixed. The thermodynamic gate γ(X) ∈ (0,1) learns to blend branches based on input statistics. The mHC mappings (H_pre, H_post) provide multi-stream aggregation inherited from [2].
@@ -1061,37 +1044,34 @@ flowchart TB
 #### Figure 3: Spectral Properties Comparison
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '10px', 'fontFamily': 'Times New Roman, serif', 'primaryTextColor': '#1a1a1a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '14px', 'fontFamily': 'Arial, sans-serif', 'primaryTextColor': '#000000', 'lineColor': '#000000'}}}%%
 flowchart LR
-    subgraph DDL["(a) Householder / DDL"]
+    subgraph DDL["(a) Householder/DDL"]
         direction TB
-        D1["H<sub>β</sub> = I − βkk<sup>T</sup>"]
-        D2["σ(H) = {1<sup>(d−1)</sup>, 1−β}"]
-        D3["Orthogonal ⟺ β ∈ {0, 2}"]
-        D4["β = 2: λ = −1 (negation)"]
+        D1["H_β = I − βkk^T"]
+        D2["Orthogonal ⟺ β ∈ {0,2}"]
+        D3["β=2: λ=−1 ✓"]
     end
     
-    subgraph CAY["(b) Cayley Transform"]
+    subgraph CAY["(b) Cayley"]
         direction TB
-        C1["Q = (I + βA/2)<sup>−1</sup>(I − βA/2)"]
-        C2["λ<sub>k</sub> = e<sup>−2i·arctan(βμ<sub>k</sub>/2)</sup>"]
-        C3["|λ<sub>k</sub>| = 1, ∀β ∈ ℝ"]
-        C4["det(Q) = +1, λ = −1 excluded"]
+        C1["Q = Cayley(A,β)"]
+        C2["|λ|=1 always ✓"]
+        C3["λ=−1 never ✗"]
     end
     
-    subgraph HYB["(c) E∆-MHC-Geo Hybrid"]
+    subgraph HYB["(c) E∆-MHC-Geo"]
         direction TB
-        H1["G<sub>γ</sub> = γQ + (1−γ)H<sub>2</sub>"]
-        H2["γ → 1: rotation (det = +1)"]
-        H3["γ → 0: reflection (det = −1)"]
-        H4["Orthogonal ∧ Negation"]
+        H1["G = γQ + (1−γ)H₂"]
+        H2["γ→1: rotation"]
+        H3["γ→0: reflection"]
     end
     
     DDL ~~~ CAY ~~~ HYB
     
-    style DDL fill:#f8f8f8,stroke:#606060,stroke-width:1px
-    style CAY fill:#f8f8f8,stroke:#606060,stroke-width:1px
-    style HYB fill:#f0f7f0,stroke:#2d5a2d,stroke-width:2px
+    style DDL fill:#f5f5f5,stroke:#333333,stroke-width:2px
+    style CAY fill:#f5f5f5,stroke:#333333,stroke-width:2px
+    style HYB fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px
 ```
 
 | Operator | Orthogonality | Negation (λ = −1) | det | Condition |
@@ -1107,51 +1087,37 @@ flowchart LR
 The E∆-MHC-Geo Transformer replaces the standard additive residual connection $\mathbf{X} + F(\mathbf{X})$ with the geometric operator $\mathcal{G}_\gamma$. Each transformer block applies the geometric operator **twice**: once before the attention sub-layer and once before the MLP sub-layer.
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '10px', 'fontFamily': 'Times New Roman, serif', 'primaryTextColor': '#1a1a1a', 'lineColor': '#404040'}}}%%
-flowchart TB
-    subgraph INPUT["Input"]
-        TOK["Tokens: [t<sub>1</sub>, ..., t<sub>T</sub>]"] --> EMB["Embedding + Position"]
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '14px', 'fontFamily': 'Arial, sans-serif', 'primaryTextColor': '#000000', 'lineColor': '#000000'}}}%%
+flowchart LR
+    subgraph IN["Input"]
+        T["Tokens"] --> E["Embed+Pos"]
     end
     
-    subgraph BLOCK["E∆-MHC-Geo Block (×L)"]
+    subgraph BLK["E∆-MHC-Geo Block ×L"]
         direction TB
-        
-        subgraph ATTN["Attention Sub-layer"]
-            direction TB
-            X1["X<sub>l</sub>"] --> G1["G<sub>γ</sub>"]
-            G1 --> LN1["LN"]
-            LN1 --> PRE1["H<sub>pre</sub>"]
-            PRE1 --> MHA["Multi-Head<br/>Attention"]
-            MHA --> POST1["H<sub>post</sub><sup>T</sup>"]
-            POST1 --> ADD1(("+"))
-            G1 --> ADD1
-        end
-        
-        subgraph MLP["FFN Sub-layer"]
-            direction TB
-            ADD1 --> G2["G<sub>γ</sub>"]
-            G2 --> LN2["LN"]
-            LN2 --> PRE2["H<sub>pre</sub>"]
-            PRE2 --> FFN["FFN"]
-            FFN --> POST2["H<sub>post</sub><sup>T</sup>"]
-            POST2 --> ADD2(("+"))
-            G2 --> ADD2
-        end
-        
-        ADD2 --> XOUT["X<sub>l+1</sub>"]
+        X["X_l"] --> GA["G_γ"]
+        GA --> A["LN → Attn"]
+        A --> HA["+H^T"]
+        HA --> GB["G_γ"]
+        GB --> F["LN → FFN"]
+        F --> HB["+H^T"]
+        HB --> Y["X_l+1"]
     end
     
-    subgraph OUTPUT["Output"]
-        FLN["LN"] --> HEAD["Linear"] --> OUT["Logits / Prediction"]
+    subgraph OUT["Output"]
+        L["LN"] --> P["Linear"]
     end
     
-    EMB --> X1
-    XOUT --> |"repeat ×L"| FLN
+    E --> X
+    Y -->|"×L"| L
     
-    style G1 fill:#f0f7f0,stroke:#2d5a2d,stroke-width:2px
-    style G2 fill:#f0f7f0,stroke:#2d5a2d,stroke-width:2px
-    style MHA fill:#f8f8f8,stroke:#404040,stroke-width:1px
-    style FFN fill:#f8f8f8,stroke:#404040,stroke-width:1px
+    style GA fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px
+    style GB fill:#c8e6c9,stroke:#1b5e20,stroke-width:3px
+    style A fill:#f5f5f5,stroke:#333333,stroke-width:1px
+    style F fill:#f5f5f5,stroke:#333333,stroke-width:1px
+    style IN fill:#f5f5f5,stroke:#333333,stroke-width:2px
+    style OUT fill:#f5f5f5,stroke:#333333,stroke-width:2px
+    style BLK fill:#fafafa,stroke:#333333,stroke-width:2px
 ```
 
 $$\mathcal{G}_\gamma(\mathbf{X}) = \gamma(\mathbf{X}) \cdot \mathbf{Q}(\mathbf{X})\mathbf{X} + (1 - \gamma(\mathbf{X})) \cdot \mathbf{H}_2(\mathbf{k}(\mathbf{X}))\mathbf{X}$$
@@ -1168,26 +1134,28 @@ $$\mathcal{G}_\gamma(\mathbf{X}) = \gamma(\mathbf{X}) \cdot \mathbf{Q}(\mathbf{X
 #### Figure 5: Midpoint Collapse Regularization
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '10px', 'fontFamily': 'Times New Roman, serif', 'primaryTextColor': '#1a1a1a'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '12px', 'fontFamily': 'Arial, Helvetica, sans-serif', 'primaryTextColor': '#000000'}}}%%
 flowchart LR
-    subgraph PENALTY["Gate Regularization: L<sub>gate</sub> = 4γ(1−γ)"]
+    subgraph PENALTY["<b>Gate Regularization: L_gate = 4γ(1−γ)</b>"]
         direction TB
-        G0["γ = 0<br/>Householder<br/>det = −1"]
-        G05["γ = 0.5<br/>Maximum penalty<br/>Unstable blend"]
-        G1["γ = 1<br/>Cayley<br/>det = +1"]
+        G0["<b>γ = 0</b><br/>Householder<br/>det = −1"]
+        G05["<b>γ = 0.5</b><br/>Maximum penalty<br/>Zero gradient!"]
+        G1["<b>γ = 1</b><br/>Cayley<br/>det = +1"]
     end
     
-    subgraph DYNAMICS["Gradient Flow"]
+    subgraph DYNAMICS["<b>Gradient Flow</b>"]
         direction TB
         GR["∂L/∂γ = 4(1 − 2γ)"]
-        DIR["γ < 0.5 → pushed to 0<br/>γ > 0.5 → pushed to 1"]
+        DIR["γ < 0.5 → pushed to 0<br/>γ > 0.5 → pushed to 1<br/><b>γ = 0.5 → stuck!</b>"]
     end
     
     PENALTY --> DYNAMICS
     
-    style G0 fill:#f0f7f0,stroke:#2d5a2d,stroke-width:1px
-    style G05 fill:#f5f5f5,stroke:#8b0000,stroke-width:2px,stroke-dasharray:4 2
-    style G1 fill:#f0f7f0,stroke:#2d5a2d,stroke-width:1px
+    style G0 fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style G05 fill:#ffebee,stroke:#b71c1c,stroke-width:2px
+    style G1 fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style PENALTY fill:#f5f5f5,stroke:#333333,stroke-width:1px
+    style DYNAMICS fill:#f5f5f5,stroke:#333333,stroke-width:1px
 ```
 
 $$\mathcal{L}_{\text{gate}} = 4\gamma(1-\gamma), \quad \frac{\partial \mathcal{L}_{\text{gate}}}{\partial \gamma} = 4(1-2\gamma) \quad \Longrightarrow \quad \gamma \xrightarrow{\text{training}} \{0, 1\}$$
@@ -1593,20 +1561,25 @@ We have presented the **E∆-MHC-Geo Transformer**, a novel architecture that ac
 ### 11.3 Architecture Selection Guide
 
 ```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '10px', 'fontFamily': 'Times New Roman, serif', 'primaryTextColor': '#1a1a1a', 'lineColor': '#404040'}}}%%
+%%{init: {'theme': 'base', 'themeVariables': { 'fontSize': '12px', 'fontFamily': 'Arial, Helvetica, sans-serif', 'primaryTextColor': '#000000', 'lineColor': '#333333'}}}%%
 flowchart TB
-    Q["Task Characteristics"]
+    Q["<b>Task Characteristics</b>"]
     
     Q --> T1["Requires SO(n)<br/>isometry preservation"]
     Q --> T2["Requires negation<br/>correction signals"]
     Q --> T3["Mixed / Unknown<br/>general purpose"]
     
-    T1 --> A1["Cayley-only<br/>(E∆-MHC-Geo, γ=1)"]
-    T2 --> A2["Householder-only<br/>(DDL, β=2)"]
-    T3 --> A3["E∆-MHC-Geo Hybrid<br/>(learned γ)"]
+    T1 --> A1["<b>Cayley-only</b><br/>(E∆-MHC-Geo, γ=1)"]
+    T2 --> A2["<b>Householder-only</b><br/>(DDL, β=2)"]
+    T3 --> A3["<b>E∆-MHC-Geo Hybrid</b><br/>(learned γ)"]
     
-    style Q fill:#f8f8f8,stroke:#404040,stroke-width:1px
-    style A3 fill:#f0f7f0,stroke:#2d5a2d,stroke-width:2px
+    style Q fill:#f5f5f5,stroke:#333333,stroke-width:2px
+    style T1 fill:#f5f5f5,stroke:#333333,stroke-width:1px
+    style T2 fill:#f5f5f5,stroke:#333333,stroke-width:1px
+    style T3 fill:#f5f5f5,stroke:#333333,stroke-width:1px
+    style A1 fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    style A2 fill:#ffebee,stroke:#b71c1c,stroke-width:2px
+    style A3 fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
 ```
 
 | Task Domain | Recommended Architecture | Rationale |
