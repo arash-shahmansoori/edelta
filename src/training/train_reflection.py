@@ -211,17 +211,25 @@ class SimpleHybrid(nn.Module):
         
         # Thermodynamic gate with symmetry-breaking initialization
         # 
-        # IMPORTANT FINDING: The midpoint collapse regularization L = 4γ(1-γ) has
-        # gradient ∂L/∂γ = 4(1-2γ) = 0 at γ=0.5, so unbiased initialization gets stuck!
+        # CRITICAL FINDING (see RESEARCH_V3.md Section 6.5):
+        # The midpoint collapse regularization L = 4γ(1-γ) has gradient:
+        #   ∂L/∂γ = 4(1-2γ) = 0  at γ = 0.5
         # 
-        # We use small negative bias to break symmetry. This is principled because:
-        # 1. The task (negation) requires Householder (γ→0), not Cayley (γ→1)
-        # 2. Random perturbation could go either direction, reducing interpretability
-        # 3. Small bias allows model to "discover" Householder is optimal
-        #
-        # For continuous benchmarks (gyroscope/stability), the input features naturally
-        # break symmetry, so unbiased init works. For this pure reflection task,
-        # explicit symmetry breaking is needed.
+        # This creates a zero-gradient critical point where the model CANNOT escape
+        # via gradient descent, even though the penalty is maximum at γ=0.5.
+        # 
+        # WHY CONTINUOUS BENCHMARKS WORK WITH UNBIASED INIT:
+        # - Input features have natural variation (sequences, continuous values)
+        # - Gate network γ(x) = σ(w·x + b) produces input-dependent values
+        # - Different inputs produce γ ≠ 0.5, breaking symmetry naturally
+        # 
+        # WHY REFLECTION TASK NEEDS SYMMETRY BREAKING:
+        # - All inputs are unit-normalized (spherically symmetric)
+        # - With zero-mean init, γ ≈ 0.5 uniformly across all samples
+        # - No natural symmetry breaking → trapped at zero-gradient point
+        # 
+        # SOLUTION: Small negative bias (b = -1.5 → γ ≈ 0.18) breaks symmetry
+        # This allows the regularization gradient to push γ → 0 (Householder)
         self.gate_linear = nn.Linear(dim, 1)
         nn.init.zeros_(self.gate_linear.weight)
         nn.init.constant_(self.gate_linear.bias, -1.5)  # Init γ ≈ 0.18 (symmetry break towards Householder)

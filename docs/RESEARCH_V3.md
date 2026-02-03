@@ -638,6 +638,44 @@ $$\mathcal{L}_{\text{total}} = \mathcal{L}_{\text{task}} + \sum_{\text{layers}} 
 
 This forces the model to "jump" between rotation and reflection rather than "swimming" through the non-orthogonal middle ground.
 
+### 6.5 Critical Limitation: Zero Gradient at Midpoint
+
+**Important Discovery:** The regularization gradient is **exactly zero** at $\gamma = 0.5$:
+
+$$\frac{\partial \mathcal{L}_{\text{gate}}}{\partial \gamma} = 4(1 - 2\gamma) = 0 \quad \text{when } \gamma = 0.5$$
+
+This creates a **critical point** where the model cannot escape via gradient descent alone, even though the penalty is maximum.
+
+**Proposition 6.1 (Symmetry Breaking Requirement).**
+*If $\gamma$ is initialized exactly at $0.5$ with zero-mean weight initialization, and all inputs produce identical gate activations, the regularization provides no gradient signal to escape the midpoint.*
+
+**Empirical Evidence:**
+
+| Initialization | Continuous Benchmarks | Reflection Task |
+|----------------|----------------------|-----------------|
+| $\gamma \approx 0.5$ (unbiased) | ✓ Works | ✗ Stuck at 0.5 |
+| $\gamma \approx 0.18$ (symmetry-breaking) | ✓ Works | ✓ Converges to 0.03 |
+
+**Why Continuous Benchmarks Work with Unbiased Initialization:**
+
+In tasks like gyroscope and stability prediction:
+- Input features $\mathbf{x}$ have natural variation (sequences, continuous values)
+- The gate network $\gamma(\mathbf{x}) = \sigma(\mathbf{w}^\top\mathbf{x} + b)$ produces **input-dependent** values
+- Even with $b = 0$, different inputs produce $\gamma \neq 0.5$
+- This natural variation breaks symmetry, allowing the regularization gradient to take effect
+
+**Why Pure Reflection Task Requires Explicit Symmetry Breaking:**
+
+In the negation task ($\mathbf{y} = -\mathbf{x}$):
+- All inputs are unit-normalized: $\|\mathbf{x}\| = 1$
+- Input distribution is spherically symmetric
+- With zero-mean initialization, $\gamma \approx 0.5$ across all samples
+- No natural symmetry breaking → model trapped at zero-gradient point
+
+**Recommended Practice:**
+- For general tasks: Use unbiased initialization ($b = 0$)
+- For spherically symmetric or homogeneous inputs: Use small symmetry-breaking bias ($b \approx -1.5$ for $\gamma \approx 0.18$)
+
 ---
 
 ## 7. Properties of E∆-MHC-Geo Hybrid
@@ -1720,8 +1758,9 @@ The experiment answers: *Does geometric inductive bias beat additional depth?* *
 | geo_hidden_ratio | 4 | Hidden dim for generators = n_embd // 4 = 32 |
 | n_streams | 4 | Number of parallel mHC streams |
 | Householder β | 2.0 (fixed) | Required for orthogonality (Theorem 7) |
-| Gate initialization | 0.0 | Neutral between rotation/reflection |
-| Gate regularization λ | 0.1 | Midpoint collapse penalty weight |
+| Gate init (continuous) | 0.0 | Neutral - input features break symmetry |
+| Gate init (reflection) | -1.5 | Symmetry-breaking (see Section 6.5) |
+| Gate regularization λ | 0.1-1.0 | Midpoint collapse penalty weight |
 | Sinkhorn iterations | 20 | For mHC doubly stochastic projection |
 | Alpha init | 0.01 | mHC soft-router temperature |
 

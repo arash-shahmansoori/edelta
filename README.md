@@ -260,6 +260,12 @@ See `assets/` and `results/` for publication figures:
 - Both achieve **96% accuracy** with 500 samples, validating geometric inductive bias
 - "Aha!" moments observed: parameter convergence precedes accuracy gains
 
+**Important Finding — Symmetry Breaking:**
+- The midpoint collapse regularization `L = 4γ(1-γ)` has **zero gradient at γ=0.5**
+- Continuous benchmarks (gyroscope, stability) work with unbiased init because input features naturally break symmetry
+- Pure reflection task requires explicit symmetry-breaking initialization (γ ≈ 0.18)
+- See `docs/RESEARCH_V3.md` Section 6.5 for detailed analysis
+
 ## Model Comparison
 
 | Model | Architecture | Key Property |
