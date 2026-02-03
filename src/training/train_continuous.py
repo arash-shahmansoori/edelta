@@ -179,9 +179,11 @@ def get_args():
     parser.add_argument('--init_gate_bias', type=float, default=0.0,
                         help='Initial gate bias (>0=prefer rotation, <0=prefer reflection)')
     
-    # Fair comparison mode
+    # Fair comparison modes
     parser.add_argument('--fair_params', action='store_true',
-                        help='Adjust n_embd to ensure similar parameter counts across models')
+                        help='[OLD] Reduce E∆-MHC-Geo geo_hidden_ratio from 4 to 8')
+    parser.add_argument('--match_proposed_params', action='store_true',
+                        help='[RECOMMENDED] Scale up baselines to match E∆-MHC-Geo (~1.79M params)')
     
     return parser.parse_args()
 
@@ -193,13 +195,35 @@ def create_model(args, input_dim: int, block_size: int):
     similar parameter counts across models (E∆ uses n_embd=104 when baseline uses 128).
     """
     
-    # Fair parameter comparison mode:
-    # - Keeps n_embd the same for all models
-    # - For E∆-MHC-Geo: reduces geo network hidden dim from n_embd//4 to n_embd//8
-    # - Results in ~1.42x GPT params (reduced from ~1.50x)
+    # Fair parameter comparison modes:
+    # 
+    # Option 1: --fair_params (OLD - not recommended)
+    #   Reduces E∆-MHC-Geo capacity to match baselines
+    #
+    # Option 2: --match_proposed_params (RECOMMENDED)
+    #   Scales UP baselines to match E∆-MHC-Geo's ~1.79M params
+    #   This is better: keeps E∆-MHC-Geo at full design, gives baselines MORE capacity
+    #   If baselines still lose with more params, that's a stronger result!
+    #
+    # Baseline n_embd values to match E∆-MHC-Geo (n_embd=128, geo_ratio=4, 1.788M params):
+    #   GPT: n_embd=156 → 1.764M (0.987x)
+    #   DDL: n_embd=148 → 1.789M (1.001x)
+    #   mHC: n_embd=156 → 1.811M (1.013x)
+    
     n_embd = args.n_embd
-    use_mhc_projections = True  # Always keep mHC projections
-    geo_hidden_ratio = 4  # Default: n_embd // 4
+    use_mhc_projections = True
+    geo_hidden_ratio = 4  # Default for E∆-MHC-Geo
+    
+    # Map baseline n_embd to match E∆-MHC-Geo's param count
+    BASELINE_NEMBD_FOR_MATCH = {
+        'gpt2': 156,  # 1.76M params
+        'ddl': 148,   # 1.79M params  
+        'mhc': 156,   # 1.81M params
+    }
+    
+    if args.match_proposed_params and args.model_type != 'edelta':
+        n_embd = BASELINE_NEMBD_FOR_MATCH.get(args.model_type, args.n_embd)
+        print(f"\n[MATCH PROPOSED] Scaling up {args.model_type} n_embd: {args.n_embd} → {n_embd}")
     
     if args.fair_params and args.model_type == 'edelta':
         geo_hidden_ratio = 8  # Smaller geo networks: n_embd // 8

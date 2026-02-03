@@ -114,7 +114,7 @@ class EdeltaMHCGeoHybrid(nn.Module):
         n_streams: int = 4, 
         init_gate_bias: float = 0.0,
         gate_reg_weight: float = 0.1,
-        geo_hidden_ratio: int = 8
+        geo_hidden_ratio: int = 4
     ):
         super().__init__()
         assert d_model % n_streams == 0, f"d_model ({d_model}) must be divisible by n_streams ({n_streams})"
@@ -125,8 +125,7 @@ class EdeltaMHCGeoHybrid(nn.Module):
         self.gate_reg_weight = gate_reg_weight
         
         # Hidden dimension for generator networks
-        # Default: n_embd // 8 for parameter parity with baselines
-        # (was n_embd // 4, which caused 50% more params)
+        # Default: n_embd // 4 (original design from RESEARCH_V3.md Section 7.1)
         hidden_dim = d_model // geo_hidden_ratio
         
         # === DATA-DEPENDENT CAYLEY ROTATION (Definition 2.1) ===
@@ -527,7 +526,7 @@ class Block(nn.Module):
         init_gate_bias = getattr(config, 'init_gate_bias', 0.0)
         gate_reg_weight = getattr(config, 'gate_reg_weight', 0.1)
         
-        geo_hidden_ratio = getattr(config, 'geo_hidden_ratio', 8)
+        geo_hidden_ratio = getattr(config, 'geo_hidden_ratio', 4)
         
         self.geo_attn = EdeltaMHCGeoHybrid(
             config.n_embd, 
@@ -638,7 +637,7 @@ class GPTConfig:
     n_streams: int = 4  # Number of streams for manifold operations
     init_gate_bias: float = 0.0  # 0=neutral, >0=prefer rotation, <0=prefer reflection
     gate_reg_weight: float = 0.1  # Weight for midpoint collapse regularization
-    geo_hidden_ratio: int = 8  # Hidden dim = n_embd // geo_hidden_ratio (8 for fair params)
+    geo_hidden_ratio: int = 4  # Hidden dim = n_embd // geo_hidden_ratio (original design)
     use_mhc_projections: bool = True  # If False, skip h_pre/h_post for fair param comparison
 
 
