@@ -4,7 +4,7 @@
 **Affiliation:** Independent Researcher  
 **Contact:** arash.mansoori65@gmail.com  
 **Date:** January 2026  
-**Version:** 3.3 (Complete with Experimental Validation)
+**Version:** 3.4 (Updated with Fair Parameter Comparison Results)
 
 ---
 
@@ -24,9 +24,10 @@ To address Cayley's inability to negate information (eigenvalue $-1$ is excluded
 $$\mathbf{X}' = \gamma(\mathbf{X}) \cdot \mathcal{C}(\mathbf{X}) + (1 - \gamma(\mathbf{X})) \cdot \mathcal{H}(\mathbf{X})$$
 
 **Key Experimental Results:**
-- **6.5× improvement** on the Gyroscope manifold precision benchmark (5.69e-4 vs 3.67e-3 for GPT)
-- **4× improvement** on the Stability isometry benchmark (3e-6 vs 1.2e-5 for GPT)
-- **Parameter convergence validated**: DDL's β → 2.0, E∆-MHC-Geo's γ → 0.0 on reflection task
+- **7.1× improvement** on the Gyroscope manifold precision benchmark (5.37e-4 vs 3.80e-3 for GPT)
+- **4.6× improvement** on the Stability isometry benchmark (3.4e-6 vs 1.55e-5 for GPT)
+- **Near-perfect norm preservation**: 0.001 deviation vs 0.47-0.54 for baselines
+- **Parameter convergence validated**: DDL's β → 1.99, E∆-MHC-Geo's γ → 0.03 on reflection task
 - **Fair comparison**: All models tested with matched parameter counts (~1.79M parameters)
 
 This unified architecture achieves:
@@ -1265,31 +1266,33 @@ All models are configured for fair comparison with matched parameter counts (~1.
 
 #### 10.2.1 Gyroscope Dataset (Manifold Precision Test)
 
-**Task:** Predict continuous rotation trajectories on SO(3).
-
-| Property | Value |
-|----------|-------|
-| **Input dimension** | 9 (flattened 3×3 rotation matrix) |
-| **Sequence length** | 32 |
-| **Training samples** | 10,000 |
-| **Validation samples** | 2,000 |
-| **Loss function** | MSE |
-
-**Purpose:** Tests whether models can maintain manifold constraints during prediction. Standard transformers drift off the rotation manifold, while E∆-MHC-Geo's guaranteed orthogonality ensures predictions remain valid rotations.
-
-#### 10.2.2 Stability Dataset (Isometry Test)
-
-**Task:** Predict sequences where $\|\mathbf{x}_{t+1}\| = \|\mathbf{x}_t\|$ (norm preservation).
+**Task:** Predict continuous rotation trajectories on SO(n).
 
 | Property | Value |
 |----------|-------|
 | **Input dimension** | 16 |
-| **Sequence length** | 64 |
-| **Training samples** | 10,000 |
-| **Validation samples** | 2,000 |
+| **Sequence length** | 255 |
+| **Training samples** | 9,000 |
+| **Validation samples** | 1,000 |
+| **Rotation angle range** | [0.10, 2.50] radians |
 | **Loss function** | MSE |
 
-**Purpose:** Tests unconditional isometry. DDL only preserves norms at β=2; our method preserves norms for any β.
+**Purpose:** Tests whether models can maintain manifold constraints during prediction. Standard transformers drift off the rotation manifold, while E∆-MHC-Geo's guaranteed orthogonality ensures predictions remain valid rotations. DDL typically breaks at θ > 0.5 radians.
+
+#### 10.2.2 Stability Dataset (Isometry Test)
+
+**Task:** Predict infinite echo sequences where $\|\mathbf{x}_{t+1}\| = \|\mathbf{x}_t\|$ (long-horizon norm preservation).
+
+| Property | Value |
+|----------|-------|
+| **Input dimension** | 64 |
+| **Sequence length** | 127 |
+| **Training samples** | 900 |
+| **Validation samples** | 100 |
+| **Noise scale** | 0.001 |
+| **Loss function** | MSE |
+
+**Purpose:** Tests unconditional isometry over extended sequences. DDL only preserves norms at β=2; our method preserves norms for any β. This is a particularly challenging benchmark as small norm errors accumulate over 127 timesteps.
 
 #### 10.2.3 Reflection Dataset (Negation Kill-Shot)
 
@@ -1320,15 +1323,18 @@ This follows the "Illusion of Insight" methodology [6] for analyzing parameter t
 
 **Table 1: Final Validation Loss (lower is better)**
 
-| Dataset | GPT | DDL | mHC | **E∆-MHC-Geo** | Improvement |
-|---------|-----|-----|-----|----------------|-------------|
-| **Gyroscope** | 3.67e-3 | 3.24e-3 | 4.08e-3 | **5.69e-4** | **6.5× vs GPT** |
-| **Stability** | 1.2e-5 | 1.1e-5 | 9.76e-3 | **3e-6** | **4× vs GPT** |
+| Dataset | GPT (9L) | DDL (8L) | mHC (9L) | **E∆-MHC-Geo (6L)** | vs GPT | vs DDL |
+|---------|----------|----------|----------|---------------------|--------|--------|
+| **Gyroscope** | 3.80e-3 | 3.29e-3 | 4.06e-3 | **5.37e-4** | **7.1×** | **6.1×** |
+| **Stability** | 1.55e-5 | 1.41e-5 | 8.46e-3 | **3.4e-6** | **4.6×** | **4.1×** |
+
+*Note: L = number of layers. All models have ~1.79M parameters (see Table A.4 for details).*
 
 **Key Observations:**
-1. **Gyroscope:** E∆-MHC-Geo achieves 6.5× lower loss than GPT, demonstrating superior manifold precision from guaranteed orthogonality.
-2. **Stability:** E∆-MHC-Geo achieves 4× lower loss, confirming unconditional isometry advantages.
-3. **mHC Failure:** On Stability, mHC's Sinkhorn approximation breaks down (9.76e-3 loss), while E∆-MHC-Geo's exact orthogonality maintains stability.
+1. **Gyroscope:** E∆-MHC-Geo achieves **7.1× lower loss** than GPT with 3 fewer layers, demonstrating that geometric inductive bias outperforms additional depth.
+2. **Stability:** E∆-MHC-Geo achieves **4.6× lower loss**, confirming unconditional isometry advantages.
+3. **mHC Failure:** On Stability, mHC's Sinkhorn approximation breaks down catastrophically (8.46e-3 loss, ~2500× worse than E∆-MHC-Geo), while E∆-MHC-Geo's exact orthogonality maintains stability.
+4. **Layer Efficiency:** E∆-MHC-Geo achieves best results with only 6 layers vs 8-9 for baselines.
 
 #### 10.3.2 Reflection Experiment: Parameter Convergence
 
@@ -1346,24 +1352,26 @@ This follows the "Illusion of Insight" methodology [6] for analyzing parameter t
 
 **Table 2: Parameter Convergence and Accuracy on Negation Task**
 
-| Samples | DDL β | DDL Accuracy | E∆-MHC-Geo γ | E∆-MHC-Geo Accuracy |
-|---------|-------|--------------|--------------|---------------------|
-| 10 | 1.41 | -0.97 | 0.19 | -0.97 |
-| 25 | 1.67 | -0.94 | 0.16 | -0.95 |
-| 50 | 1.88 | -0.85 | 0.13 | -0.96 |
-| 100 | **1.95** ✓ | -0.23 | 0.13 | -0.93 |
-| 200 | **1.98** ✓ | 0.63 | **0.05** ✓ | 0.66 |
-| 500 | **1.99** ✓ | **0.96** | **0.03** ✓ | **0.96** |
+| Samples | DDL β | DDL Acc | Converged? | E∆-MHC-Geo γ | E∆ Acc | Converged? |
+|---------|-------|---------|------------|--------------|--------|------------|
+| 10 | 1.41 | -0.97 | ✗ | 0.189 | -0.97 | ✗ |
+| 25 | 1.59 | -0.93 | ✗ | 0.183 | -0.96 | ✗ |
+| 50 | 1.88 | -0.85 | ✗ | 0.129 | -0.96 | ✗ |
+| 100 | **1.95** | -0.23 | ✓ | 0.129 | -0.93 | ✗ |
+| 200 | **1.98** | 0.63 | ✓ | **0.050** | 0.66 | ✓ |
+| 500 | **1.99** | **0.96** | ✓ | **0.029** | **0.96** | ✓ |
 
-**Key Findings (following arXiv:2601.00514v1 methodology):**
+*Convergence threshold: DDL β ≥ 1.95, E∆-MHC-Geo γ ≤ 0.05*
 
-1. **DDL Parameter Convergence:** β converges to 2.0 with ≥100 samples, validating Theorem 7 (Householder orthogonality requires β=2).
+**Key Findings (following arXiv:2601.00514v1 "Illusion of Insight" methodology):**
 
-2. **E∆-MHC-Geo Gate Convergence:** γ converges to 0.0 with ≥200 samples, confirming the model learns to select the Householder component for negation tasks.
+1. **DDL Parameter Convergence:** β converges to 1.99 (target: 2.0) with ≥100 samples, validating Theorem 7 (Householder orthogonality requires β=2). Final β std: ±0.007.
 
-3. **"Aha!" Moments:** Parameter convergence precedes accuracy gains—the parameters reach near-optimal values before accuracy improves dramatically.
+2. **E∆-MHC-Geo Gate Convergence:** γ converges to 0.029 (target: 0.0) with ≥200 samples, confirming the model learns to select the Householder component for negation tasks. Final γ std: ±0.015.
 
-4. **Sample Efficiency:** Both geometric models achieve >95% accuracy with 500 samples, while GPT and mHC (excluded from this test as they use MLP approximation) would require significantly more data.
+3. **"Aha!" Moments:** Parameter convergence precedes accuracy gains—at 100 samples, DDL's β reaches 1.95 but accuracy is still -0.23. The accuracy jump happens between 100-200 samples.
+
+4. **Sample Efficiency:** Both geometric models achieve >95% accuracy with 500 samples, while GPT and mHC (excluded from this test as they use MLP approximation rather than geometric operators) would require significantly more data.
 
 #### 10.3.3 Training Dynamics
 
@@ -1377,13 +1385,13 @@ This follows the "Illusion of Insight" methodology [6] for analyzing parameter t
 
 ![Stability Analysis](../results/journal_fig2_stability.png)
 
-**Figure 10: Stability Benchmark Analysis.** Isometry test measuring norm preservation: $\|\mathbf{x}_{out}\|_2 / \|\mathbf{x}_{in}\|_2$. E∆-MHC-Geo maintains near-perfect norm preservation (ratio ≈ 1.0) due to unconditional orthogonality, while mHC shows significant norm distortion.
+**Figure 10: Stability Benchmark Analysis.** Three-panel analysis: (a) Output norm evolution over 100 sequence positions—E∆-MHC-Geo (green) maintains perfect norm=1.0, while others deviate to 0.5-0.7. (b) Mean norm deviation from target (|norm - 1.0|): GPT=0.474, DDL=0.506, mHC=0.543, **E∆-MHC-Geo=0.001** (470× better). (c) Final validation loss comparison showing E∆-MHC-Geo achieves 3e-6 vs 9e-3 for mHC.
 
 #### Figure 11: Comprehensive Reflection Analysis
 
 ![Reflection Comprehensive](../results/reflection_comprehensive.png)
 
-**Figure 11: Complete Reflection Experiment Summary.** Four-panel analysis showing: (a) Parameter trajectories, (b) Accuracy vs. samples, (c) Training loss curves, (d) Parameter convergence rates. Following the "Illusion of Insight" methodology from arXiv:2601.00514v1.
+**Figure 11: Complete Reflection Experiment Summary (following arXiv:2601.00514v1).** Four-panel analysis: (a) Final parameter values across sample sizes—DDL β increases from 1.41 to 1.99, E∆-MHC-Geo γ decreases from 0.19 to 0.03. (b) Negation accuracy comparison—both methods reach ~96% at 500 samples. (c) DDL training dynamics showing β→2.0 with concurrent accuracy improvement. (d) E∆-MHC-Geo training dynamics showing γ→0.0 as the model learns to select the Householder component for negation.
 
 **Training Stability Observations:**
 1. E∆-MHC-Geo exhibits smooth loss curves without the oscillations seen in DDL (caused by β variations breaking orthogonality).
@@ -1620,8 +1628,47 @@ This ensures the optimizer is pushed toward binary decisions $\gamma \in \{0, 1\
 | Positional | Learned | Learned | Learned | Learned |
 | Attention | Causal | Causal | Causal | Causal |
 | FFN | 4×n_embd | 4×n_embd | 4×n_embd | 4×n_embd |
-| Residual | x + f(x) | x - β(k·x)k | Sinkhorn | γ·Cayley + (1-γ)·House |
+| Residual | x + f(x) | H_β·x + βkv^T | Sinkhorn | γ·Cayley + (1-γ)·House |
 | Normalization | LayerNorm | LayerNorm | LayerNorm | LayerNorm |
+
+**Table A.4: Fair Parameter Matching Configuration**
+
+We match parameter counts by scaling up baseline `n_layer` while keeping `n_embd=128` constant. This tests whether geometric inductive bias outperforms additional depth at equivalent capacity.
+
+| Model | n_layer | n_head | n_embd | n_streams | Total Params | Ratio to E∆ |
+|-------|---------|--------|--------|-----------|--------------|-------------|
+| **E∆-MHC-Geo** | **6** | 4 | 128 | 4 | **1.788M** | 1.000× |
+| GPT | 9 | 4 | 128 | — | 1.780M | 0.996× |
+| DDL | 8 | 4 | 128 | — | 1.784M | 0.998× |
+| mHC | 9 | 4 | 128 | 4 | 1.838M | 1.028× |
+
+**Rationale:** E∆-MHC-Geo has additional parameters per layer (Cayley generators u_net, v_net, k_net, β_net, gate) but uses only 6 layers. Baselines compensate by using more layers (8-9) to achieve parameter parity. This is a fair comparison because:
+
+1. **Same representation dimension** (n_embd=128): All models see the same "world"
+2. **Same attention capacity** (n_head=4): Same number of attention heads per layer
+3. **Equivalent total capacity** (~1.79M params): Same total learnable parameters
+
+The experiment answers: *Does geometric inductive bias beat additional depth?* **Yes—E∆-MHC-Geo with 6 layers beats baselines with 8-9 layers.**
+
+**Table A.5: E∆-MHC-Geo Specific Parameters**
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| geo_hidden_ratio | 4 | Hidden dim for generators = n_embd // 4 = 32 |
+| n_streams | 4 | Number of parallel mHC streams |
+| Householder β | 2.0 (fixed) | Required for orthogonality (Theorem 7) |
+| Gate initialization | 0.0 | Neutral between rotation/reflection |
+| Gate regularization λ | 0.1 | Midpoint collapse penalty weight |
+| Sinkhorn iterations | 20 | For mHC doubly stochastic projection |
+| Alpha init | 0.01 | mHC soft-router temperature |
+
+**Table A.6: Dataset Configuration**
+
+| Dataset | Dim | Seq Len | Train | Val | Purpose |
+|---------|-----|---------|-------|-----|---------|
+| Gyroscope | 16 | 255 | 9,000 | 1,000 | Manifold precision (rotation) |
+| Stability | 64 | 127 | 900 | 100 | Long-horizon isometry |
+| Reflection | 64 | 1 | 10-500 | 500 | Negation (y = -x) |
 
 ### A.5 Implementation Notes
 
@@ -1651,14 +1698,34 @@ This pushes $\gamma < 0.5$ toward 0 and $\gamma > 0.5$ toward 1.
 
 ### A.6 Statistical Significance
 
-All reported results are averaged over 3 random seeds (42, 123, 456). Standard deviations:
+Results from single seed (42) are reported in main text. The following table shows validation loss (×10⁻⁵ for readability):
 
-| Dataset | GPT | DDL | mHC | E∆-MHC-Geo |
-|---------|-----|-----|-----|------------|
-| Gyroscope | 3.67e-3 ± 2.1e-4 | 3.24e-3 ± 1.8e-4 | 4.08e-3 ± 3.2e-4 | **5.69e-4 ± 4.2e-5** |
-| Stability | 1.2e-5 ± 1.1e-6 | 1.1e-5 ± 9.8e-7 | 9.76e-3 ± 8.4e-4 | **3e-6 ± 2.7e-7** |
+| Dataset | GPT (9L) | DDL (8L) | mHC (9L) | **E∆-MHC-Geo (6L)** |
+|---------|----------|----------|----------|---------------------|
+| Gyroscope | 380.0 | 329.5 | 406.0 | **53.7** |
+| Stability | 1.55 | 1.41 | 8463 | **0.34** |
 
-All improvements are statistically significant (p < 0.01, two-tailed t-test).
+*Values are final validation loss × 10⁵*
+
+**Norm Preservation Analysis (Stability Dataset):**
+
+| Model | Mean Norm Deviation | Norm at Position 100 |
+|-------|---------------------|---------------------|
+| GPT | 0.474 | ~0.55 |
+| DDL | 0.506 | ~0.50 |
+| mHC | 0.543 | ~0.45 |
+| **E∆-MHC-Geo** | **0.001** | **~1.00** |
+
+E∆-MHC-Geo achieves **470× better norm preservation** than the best baseline.
+
+**Reflection Experiment Parameter Convergence:**
+
+| Model | Parameter | Target | Final Value | Std Dev |
+|-------|-----------|--------|-------------|---------|
+| DDL | β | 2.0 | 1.9933 | ±0.0071 |
+| E∆-MHC-Geo | γ | 0.0 | 0.0287 | ±0.0149 |
+
+Both parameters converge to within 0.3% and 2.9% of their theoretical targets respectively.
 
 ---
 
@@ -1708,6 +1775,7 @@ bash scripts/run_reflection.sh
 
 ---
 
-*Document Version 3.3 — January 2026*
+*Document Version 3.4 — January 2026*
 *E∆-MHC-Geo: Adaptive Geodesic Operations with Guaranteed Orthogonality*
+*Updated with fair parameter comparison results (~1.79M params for all models)*
 *© 2026 Arash Shahmansoori. All rights reserved.*
