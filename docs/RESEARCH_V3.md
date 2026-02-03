@@ -1356,17 +1356,11 @@ The most striking finding: E∆-MHC-Geo uses only **6 layers** vs 8-9 for baseli
 
 #### 10.3.2 Reflection Experiment: Parameter Convergence
 
-#### Figure 7: Parameter Trajectories During Training
+#### Figure 7: "Aha!" Moment Visualization
 
-![Parameter Trajectories](../results/reflection_trajectories.png)
+![Reflection Aha Moment](../results/reflection_aha_moment.png)
 
-**Figure 7: Parameter Evolution Analysis (following arXiv:2601.00514v1 methodology).** Left: DDL's β parameter trajectory converging to 2.0 (exact Householder). Right: E∆-MHC-Geo's γ gate converging to 0.0 (selecting Householder component). Shaded regions indicate "Aha!" moments where parameter convergence precedes accuracy gains.
-
-#### Figure 8: Sample Efficiency Comparison
-
-![Sample Efficiency](../results/reflection_sample_efficiency.png)
-
-**Figure 8: Sample Efficiency on Negation Task.** Both DDL and E∆-MHC-Geo achieve >95% accuracy with 500 samples, significantly outperforming standard transformers which require orders of magnitude more data for geometric tasks.
+**Figure 7: "Aha!" Moment Visualization (following arXiv:2601.00514v1 "Illusion of Insight" methodology).** This figure captures the key experimental finding: sudden accuracy jumps triggered by parameter convergence. Panel (a): DDL's β trajectory converging to 2.0 (exact Householder). Panel (b): E∆-MHC-Geo's γ trajectory converging to 0.0 (selecting Householder over Cayley). Panels (c-d): The critical "Aha!" moment scatter plots showing accuracy vs. parameter colored by training iteration—as β→2 and γ→0, accuracy suddenly jumps from -100% (wrong direction) to +96% (correct negation). This validates Theorem 3: Cayley cannot achieve det=-1, so the model learns to select Householder (γ→0) for reflection tasks.
 
 **Table 2: Parameter Convergence and Accuracy on Negation Task**
 

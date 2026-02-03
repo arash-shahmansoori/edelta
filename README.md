@@ -83,9 +83,7 @@ edelta/
 │   ├── journal_fig1_training.png
 │   ├── journal_fig2_stability.png
 │   ├── journal_fig3_ablation.png
-│   ├── reflection_trajectories.png     # Parameter trajectories (arXiv:2601.00514v1 style)
-│   ├── reflection_sample_efficiency.png
-│   └── reflection_comprehensive.png
+│   └── reflection_aha_moment.png       # "Aha!" moment visualization (arXiv:2601.00514v1 style)
 ├── docs/                       # Documentation
 │   ├── RESEARCH_V3.md          # Full theoretical foundation
 │   └── ...
@@ -227,13 +225,11 @@ See `assets/` and `results/` for publication figures:
 | `journal_fig2_stability.png` | Stability analysis: norm preservation (E∆-MHC-Geo: 0.001 vs 0.47-0.54) |
 | `journal_fig3_ablation.png` | Final performance comparison showing 6.1× and 4.1× improvements |
 
-### Reflection Experiment Figures (arXiv:2601.00514v1 methodology)
+### Reflection Experiment Figure (arXiv:2601.00514v1 methodology)
 
 | Figure | Description |
 |--------|-------------|
-| `reflection_trajectories.png` | **Parameter trajectories**: β→1.99, γ→0.03 with accuracy correlation |
-| `reflection_sample_efficiency.png` | Sample efficiency: both reach 96% accuracy at 500 samples |
-| `reflection_comprehensive.png` | 4-panel analysis: parameters, accuracy, and training dynamics |
+| `reflection_aha_moment.png` | **"Aha!" Moment Visualization**: (a-b) Parameter trajectories (β→2, γ→0), (c-d) Scatter plots showing sudden accuracy jumps as parameters converge—the key visual insight |
 
 ### Continuous Benchmark Results (Fair Comparison: ~1.79M params each)
 
