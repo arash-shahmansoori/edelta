@@ -38,6 +38,17 @@ Following [arXiv:2601.00514v1](https://arxiv.org/abs/2601.00514) "Illusion of In
 - **DDL**: β converges to **1.99** (target: 2.0) — validates Householder orthogonality theorem
 - **E∆-MHC-Geo**: γ converges to **0.03** (target: 0.0) — learns to select Householder for negation
 
+### New: Near-π Rotation Analysis & Regularization Theory
+
+![Regularization Analysis](results/regularization_analysis.png)
+
+**Key Discovery:** For near-π rotations (θ approaching 180°), the gate converges to γ ≈ 0.5 (blended operator) yet achieves excellent loss (~1e-6). This is **correct behavior**:
+- The blended operator `0.5·Cayley + 0.5·Householder` can approximate near-π transformations
+- Only exact reflection (y=-x) requires gate polarization to γ → 0
+- **Theorem 12:** All smooth symmetric regularizations have zero gradient at γ=0.5 (mathematical necessity)
+
+See `docs/RESEARCH.md` Sections 6.6-6.7 for complete analysis.
+
 ---
 
 ## Overview
@@ -59,13 +70,14 @@ edelta/
 │   │   ├── mhc.py              # DeepSeek mHC (arXiv:2512.24880)
 │   │   └── edelta_hybrid.py    # E∆-MHC-Geo (proposed model)
 │   ├── training/               # Training scripts
-│   │   ├── train_continuous.py # Continuous physics benchmarks (gyroscope, stability)
+│   │   ├── train_continuous.py # Continuous benchmarks (gyroscope, stability, near-π)
 │   │   ├── train_reflection.py # Direct reflection test (y = -x)
 │   │   └── train_language_model.py
 │   ├── data/                   # Data preparation modules
 │   │   ├── gyroscope.py        # Manifold precision test
 │   │   ├── stability.py        # Isometry test
-│   │   └── reflection.py       # Pure negation task
+│   │   ├── reflection.py       # Pure negation task
+│   │   └── near_pi_rotation.py # Near-π rotation datasets (NEW)
 │   ├── utils/                  # Utility scripts
 │   │   ├── param_counter.py    # Model parameter analysis
 │   │   ├── sample.py           # Language model sampling
@@ -83,9 +95,10 @@ edelta/
 │   ├── journal_fig1_training.png
 │   ├── journal_fig2_stability.png
 │   ├── journal_fig3_ablation.png
-│   └── reflection_aha_moment.png       # "Aha!" moment visualization (arXiv:2601.00514v1 style)
+│   ├── reflection_aha_moment.png       # "Aha!" moment visualization
+│   └── regularization_analysis.png     # Regularization theory visualization (NEW)
 ├── docs/                       # Documentation
-│   └── RESEARCH.md             # Full theoretical foundation (1800+ lines)
+│   └── RESEARCH.md             # Full theoretical foundation (2000+ lines)
 └── archive/                    # Old/experimental code
 ```
 
@@ -185,7 +198,35 @@ we track parameter trajectories to identify "Aha!" moments.
 - DDL: β should converge to 2.0 (exact Householder reflection)
 - E∆-MHC-Geo: γ should converge to 0.0 (select Householder component over Cayley)
 
-### 4. Verify Parameter Counts
+### 4. Run Near-π Rotation Experiments (NEW)
+
+Near-π rotation experiments test the boundary between rotation and reflection to understand gate behavior.
+
+```bash
+# Generate near-π rotation datasets
+uv run src/data/near_pi_rotation.py --mode single_plane --theta 3.1 --seq_len 128
+uv run src/data/near_pi_rotation.py --mode multi_plane --theta 3.14 --seq_len 128
+
+# Train E∆-MHC-Geo on single-plane near-π (expect γ ≈ 0.5, good convergence)
+uv run src/training/train_continuous.py \
+    --model_type edelta \
+    --dataset near_pi_rotation \
+    --out_dir out-near-pi-single \
+    --init_gate_bias 0.0 \
+    --gate_reg_weight 0.5
+
+# Train E∆-MHC-Geo on multi-plane near-π (expect γ ≈ 0.5, good convergence)
+uv run src/training/train_continuous.py \
+    --model_type edelta \
+    --dataset near_pi_rotation_multiplane \
+    --out_dir out-near-pi-multi \
+    --init_gate_bias 0.0 \
+    --gate_reg_weight 0.5
+```
+
+**Key Finding:** For near-π rotations, the gate converges to γ ≈ 0.5 (blended) rather than polarizing, yet achieves excellent loss (~1e-6). This is **correct behavior**—the blended operator is a valid solution for near-π transformations where eigenvalues approach but don't equal -1. See `docs/RESEARCH.md` Section 6.7 for full analysis.
+
+### 5. Verify Parameter Counts
 
 ```bash
 # Compare parameter counts across all models
@@ -198,14 +239,14 @@ uv run src/utils/param_counter.py --find_match
 uv run src/utils/param_counter.py --breakdown
 ```
 
-### 5. Generate Figures
+### 6. Generate Figures
 
 ```bash
 # Generate publication-quality figures (saves to results/)
 uv run src/visualization/visualize_journal.py
 ```
 
-### 6. Sample from Language Model
+### 7. Sample from Language Model
 
 ```bash
 # Sample from a trained language model checkpoint
@@ -229,6 +270,12 @@ See `assets/` and `results/` for publication figures:
 | Figure | Description |
 |--------|-------------|
 | `reflection_aha_moment.png` | **"Aha!" Moment Visualization**: (a) DDL β: 1.0→2.0, (b) E∆ γ: 0.18→0.01 with uncertainty bands, (c-d) Scatter plots showing "Aha!" moments as parameters converge. **Note:** Uses symmetry-breaking init (see Section 6.5) |
+
+### Regularization Analysis Figure (NEW)
+
+| Figure | Description |
+|--------|-------------|
+| `regularization_analysis.png` | **Mathematical proof** that all smooth symmetric regularizations have zero gradient at γ=0.5. Shows why current `4γ(1-γ)` is optimal among alternatives. See `docs/RESEARCH.md` Section 6.6 |
 
 ### Continuous Benchmark Results (Fair Comparison: ~1.79M params each)
 
@@ -264,6 +311,24 @@ See `assets/` and `results/` for publication figures:
 - Continuous benchmarks (gyroscope, stability) work with unbiased init because input features naturally break symmetry
 - Pure reflection task requires explicit symmetry-breaking initialization (γ ≈ 0.18)
 - See `docs/RESEARCH.md` Section 6.5 for detailed analysis
+
+### Near-π Rotation Experiment Results (NEW)
+
+These experiments probe the boundary between rotation and reflection:
+
+| Dataset | θ | Eigenvalues near -1 | Init Bias | Final Loss | γ (avg) | Polarized? |
+|---------|---|---------------------|-----------|------------|---------|------------|
+| Single-plane | 177.6° | 2/64 | 0.0 | **1e-6** | 0.53 | ✗ |
+| Multi-plane | 179.9° | 64/64 | 0.0 | **2e-6** | 0.53 | ✗ |
+| Multi-plane | 179.9° | 64/64 | -1.5 | **2e-6** | 0.53 | ✗ |
+| Exact y=-x | — | 64/64 | -1.5 | 1e-4 | **0.03** | ✓ |
+
+**Key Finding — Blended Solution is Valid:**
+- For near-π rotations, gate converges to γ ≈ 0.5 (blended) yet achieves excellent loss (~1e-6)
+- This is **correct behavior**: the blended operator can approximate near-π transformations
+- Only exact reflection (y=-x) requires gate polarization (γ → 0)
+- Mathematical proof: all smooth symmetric regularizations have zero gradient at γ=0.5 (Theorem 12)
+- See `docs/RESEARCH.md` Section 6.6-6.7 for full analysis and Figure `regularization_analysis.png`
 
 ## Model Comparison
 

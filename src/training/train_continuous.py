@@ -142,7 +142,8 @@ def get_args():
     # Data
     parser.add_argument('--dataset', type=str, default='gyroscope',
                         choices=['gyroscope', 'correction', 'stability',
-                                 'correction_insight', 'correction_entropy', 'correction_shift'],
+                                 'correction_insight', 'correction_entropy', 'correction_shift',
+                                 'near_pi_rotation', 'near_pi_rotation_multiplane'],
                         help='Dataset to train on')
     parser.add_argument('--data_dir', type=str, default='data')
     
@@ -310,6 +311,12 @@ def load_dataset(dataset_name: str, data_dir: str = 'data') -> dict:
         'val_y': torch.from_numpy(np.load(os.path.join(path, 'val_y.npy'))),
     }
     
+    # Handle 2D datasets (batch, dim) by adding sequence dimension
+    # This makes them compatible with the transformer wrapper which expects (batch, seq, dim)
+    for key in ['train_x', 'train_y', 'val_x', 'val_y']:
+        if data[key].dim() == 2:
+            data[key] = data[key].unsqueeze(1)  # (batch, dim) -> (batch, 1, dim)
+    
     # Load additional metadata if available (for paper-style analysis)
     for extra in ['train_entropy', 'train_shift_needed', 'train_scenarios',
                   'train_uncertainty', 'train_expected_shift', 'metadata']:
@@ -350,6 +357,9 @@ def get_input_dim(dataset_name: str) -> int:
         'correction_insight': 32,
         'correction_entropy': 32,
         'correction_shift': 32,
+        # Near-π rotation datasets (test Cayley limits)
+        'near_pi_rotation': 64,           # Single-plane: γ → 1 (Cayley)
+        'near_pi_rotation_multiplane': 64, # Multi-plane: γ → 0 (Householder)
     }
     if dataset_name not in dims:
         # Try to infer from data files
