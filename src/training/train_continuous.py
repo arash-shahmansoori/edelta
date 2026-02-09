@@ -491,6 +491,9 @@ def train(args):
         'grad_norm': [],           # Gradient norm (before clipping)
         'grad_norm_clipped': [],   # Gradient norm (after clipping)
         'param_norm': [],          # Parameter norm
+        'gamma_mean': [],          # E∆-MHC-Geo gate mean (γ → 0: Householder, γ → 1: Cayley)
+        'gamma_std': [],           # E∆-MHC-Geo gate std
+        'gamma_per_layer': [],     # E∆-MHC-Geo per-layer gamma values
     }
     
     t0 = time.time()
@@ -505,13 +508,30 @@ def train(args):
         # Evaluate
         if iter_num % args.eval_interval == 0:
             losses = estimate_loss(model, data, args.batch_size, args.eval_iters, device)
-            print(f"step {iter_num}: train loss {losses['train']:.6f}, val loss {losses['val']:.6f}")
+            
+            # Track gate statistics for E∆-MHC-Geo
+            gamma_mean, gamma_std, gamma_per_layer = None, None, []
+            if args.model_type == 'edelta' and hasattr(model.core, 'get_gate_statistics'):
+                # Run a forward pass to populate gamma values
+                with torch.no_grad():
+                    sample_x, _ = get_batch(data, 'val', args.batch_size, device)
+                    model(sample_x)
+                gate_stats = model.core.get_gate_statistics()
+                gamma_mean = gate_stats.get('gamma_mean')
+                gamma_std = gate_stats.get('gamma_std')
+                gamma_per_layer = gate_stats.get('gamma_per_layer', [])
+                print(f"step {iter_num}: train loss {losses['train']:.6f}, val loss {losses['val']:.6f}, γ={gamma_mean:.3f}" if gamma_mean else f"step {iter_num}: train loss {losses['train']:.6f}, val loss {losses['val']:.6f}")
+            else:
+                print(f"step {iter_num}: train loss {losses['train']:.6f}, val loss {losses['val']:.6f}")
             
             train_log['iter'].append(iter_num)
             train_log['train_loss'].append(losses['train'])
             train_log['val_loss'].append(losses['val'])
             train_log['lr'].append(lr)
             train_log['time'].append(time.time() - t0)
+            train_log['gamma_mean'].append(gamma_mean)
+            train_log['gamma_std'].append(gamma_std)
+            train_log['gamma_per_layer'].append(gamma_per_layer)
             
             if losses['val'] < best_val_loss:
                 best_val_loss = losses['val']
@@ -581,6 +601,17 @@ def train(args):
     print(f"Final train loss: {final_losses['train']:.6f}")
     print(f"Final val loss: {final_losses['val']:.6f}")
     
+    # Get final gate statistics for E∆-MHC-Geo
+    final_gamma_mean, final_gamma_std = None, None
+    if args.model_type == 'edelta' and hasattr(model.core, 'get_gate_statistics'):
+        with torch.no_grad():
+            sample_x, _ = get_batch(data, 'val', args.batch_size, device)
+            model(sample_x)
+        gate_stats = model.core.get_gate_statistics()
+        final_gamma_mean = gate_stats.get('gamma_mean')
+        final_gamma_std = gate_stats.get('gamma_std')
+        print(f"Final γ: {final_gamma_mean:.4f} ± {final_gamma_std:.4f}")
+    
     results = {
         'model_type': args.model_type,
         'dataset': args.dataset,
@@ -589,6 +620,8 @@ def train(args):
         'final_val_loss': final_losses['val'],
         'n_params': model.get_num_params(),
         'config': vars(args),
+        'final_gamma_mean': final_gamma_mean,
+        'final_gamma_std': final_gamma_std,
     }
     np.save(os.path.join(args.out_dir, 'results.npy'), results)
     

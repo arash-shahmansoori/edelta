@@ -166,6 +166,7 @@ class EdeltaMHCGeoHybrid(nn.Module):
         # === THERMODYNAMIC GATE ===
         # γ(x) = σ(W_γ · x̄ + b_γ) modulated by entropy
         self.gate_net = nn.Linear(d_model, 1, bias=True)
+        self.gate_net._is_gate_net = True  # Mark to skip global init
         nn.init.zeros_(self.gate_net.weight)
         nn.init.constant_(self.gate_net.bias, init_gate_bias)
         
@@ -370,6 +371,9 @@ class EdeltaMHCGeoHybrid(nn.Module):
         # Forces binary decisions to maintain orthogonality
         self._gate_reg_loss = self.gate_reg_weight * 4 * gamma * (1 - gamma)
         self._gate_reg_loss = self._gate_reg_loss.mean()
+        
+        # Store last gamma for tracking (used by get_gate_statistics)
+        self._last_gamma = gamma.detach().mean().item()
         
         # === DATA-DEPENDENT CAYLEY ROTATION ===
         # Q(x) ∈ SO(n), det = +1, unconditionally orthogonal
@@ -619,6 +623,15 @@ class Block(nn.Module):
             self.geo_attn.get_gate_regularization_loss() + 
             self.geo_mlp.get_gate_regularization_loss()
         )
+    
+    def get_gate_statistics(self) -> dict:
+        """Get gamma statistics from both hybrid operators."""
+        gamma_attn = getattr(self.geo_attn, '_last_gamma', None)
+        gamma_mlp = getattr(self.geo_mlp, '_last_gamma', None)
+        return {
+            'gamma_attn': gamma_attn,
+            'gamma_mlp': gamma_mlp,
+        }
 
 
 @dataclass
@@ -715,6 +728,9 @@ class GPT(nn.Module):
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize weights with scaled normal distribution."""
         if isinstance(module, nn.Linear):
+            # Skip gate_net - it has special initialization (init_gate_bias)
+            if hasattr(module, '_is_gate_net'):
+                return
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
@@ -761,6 +777,36 @@ class GPT(nn.Module):
         for block in self.transformer.h:
             total_reg = total_reg + block.get_gate_regularization_loss()
         return total_reg
+    
+    def get_gate_statistics(self) -> dict:
+        """
+        Get gamma statistics from all blocks.
+        
+        Returns:
+            dict with 'gamma_mean', 'gamma_std', 'gamma_per_layer'
+        """
+        gammas = []
+        per_layer = []
+        for i, block in enumerate(self.transformer.h):
+            stats = block.get_gate_statistics()
+            layer_gammas = []
+            if stats['gamma_attn'] is not None:
+                gammas.append(stats['gamma_attn'])
+                layer_gammas.append(stats['gamma_attn'])
+            if stats['gamma_mlp'] is not None:
+                gammas.append(stats['gamma_mlp'])
+                layer_gammas.append(stats['gamma_mlp'])
+            if layer_gammas:
+                per_layer.append(sum(layer_gammas) / len(layer_gammas))
+        
+        if gammas:
+            import numpy as np
+            return {
+                'gamma_mean': float(np.mean(gammas)),
+                'gamma_std': float(np.std(gammas)),
+                'gamma_per_layer': per_layer,
+            }
+        return {'gamma_mean': None, 'gamma_std': None, 'gamma_per_layer': []}
 
     def crop_block_size(self, block_size: int) -> None:
         """Crop model to smaller block size."""
