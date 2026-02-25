@@ -161,6 +161,13 @@ def plot_training_curves(ax, dataset_key, title):
         
         iters = np.array(log['iter'])
         val_loss = np.array(log['val_loss'])
+        
+        results = load_results(out_dir)
+        if results and 'final_val_loss' in results:
+            final_iter = int(iters[-1]) + 100
+            iters = np.append(iters, final_iter)
+            val_loss = np.append(val_loss, results['final_val_loss'])
+        
         max_iter = max(max_iter, iters[-1])
         
         # Smooth the curve
