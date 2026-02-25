@@ -381,8 +381,10 @@ def add_panel_label(ax, label, x=-0.12, y=1.08):
 def create_near_pi_figure():
     """Create publication-quality near-π rotation figure.
     
-    Layout: Row 1 = training curves, Row 2 = final loss bar chart + summary.
-    Init robustness panels removed (data not available in current directory structure).
+    Layout: 3 rows x 3 columns
+      Row 1: (a) single-plane training, (b) multi-plane training, summary table
+      Row 2: (c-e) single-plane per-layer gate evolution for 3 initializations
+      Row 3: (f-h) multi-plane per-layer gate evolution for 3 initializations
     """
     
     plt.rcParams.update({
@@ -397,12 +399,12 @@ def create_near_pi_figure():
         'ytick.minor.width': 0.6,
     })
     
-    fig = plt.figure(figsize=(15, 9))
-    gs = gridspec.GridSpec(2, 3, figure=fig,
-                          hspace=0.35, wspace=0.30,
-                          left=0.07, right=0.95, top=0.91, bottom=0.08)
+    fig = plt.figure(figsize=(16, 13))
+    gs = gridspec.GridSpec(3, 3, figure=fig,
+                          hspace=0.38, wspace=0.30,
+                          left=0.06, right=0.96, top=0.94, bottom=0.05)
     
-    # ========== Row 1: Training Curves ==========
+    # ========== Row 1: Training Curves + Summary ==========
     ax1 = fig.add_subplot(gs[0, 0])
     plot_training_curves(ax1, 'single', 'Single-Plane Near-π (θ=177.6°)')
     add_panel_label(ax1, '(a)')
@@ -411,7 +413,6 @@ def create_near_pi_figure():
     plot_training_curves(ax2, 'multi', 'Multi-Plane Near-π (θ=179.9°)')
     add_panel_label(ax2, '(b)')
     
-    # Summary panel with ALL models including JPmHC and E∆
     ax_summary = fig.add_subplot(gs[0, 2])
     ax_summary.axis('off')
     
@@ -448,76 +449,35 @@ def create_near_pi_figure():
                    bbox=dict(boxstyle='round,pad=0.6', facecolor='#f5f9ff',
                             edgecolor='#2166AC', alpha=0.98, linewidth=2))
     
-    # ========== Row 2: Final Loss Bar Charts ==========
-    model_order = ['GPT', 'DDL', 'mHC', 'JPmHC', 'E∆-MHC-Geo']
-    model_labels = ['GPT', 'DDL', 'mHC', 'JPmHC', 'E∆']
-    bar_colors = [COLORS[m] for m in model_order]
+    # ========== Row 2: Single-Plane Per-Layer Gate Evolution ==========
+    init_configs = [
+        ('cayley', 'Cayley-biased (γ₀≈0.82)'),
+        ('neutral', 'Neutral (γ₀=0.50)'),
+        ('householder', 'Householder-biased (γ₀≈0.18)'),
+    ]
+    panel_labels_r2 = ['(c)', '(d)', '(e)']
+    for col, (init_type, init_label) in enumerate(init_configs):
+        ax = fig.add_subplot(gs[1, col])
+        out_dir = INIT_DIRS['single'].get(init_type, '')
+        results = load_results(out_dir)
+        val_loss_str = f"{results.get('final_val_loss', 0):.2e}" if results else "N/A"
+        title = f'Single-Plane: {init_label}'
+        plot_single_init_single_task(ax, init_type, 'single', title, val_loss=val_loss_str)
+        add_panel_label(ax, panel_labels_r2[col])
     
-    # (c) Single-plane final loss bar chart
-    ax3 = fig.add_subplot(gs[1, 0])
-    s_losses = []
-    for m in model_order:
-        r = load_results(NEAR_PI_DIRS['single'][m])
-        s_losses.append(r.get('final_val_loss', r.get('best_val_loss', 1.0)) if r else 1.0)
+    # ========== Row 3: Multi-Plane Per-Layer Gate Evolution ==========
+    panel_labels_r3 = ['(f)', '(g)', '(h)']
+    for col, (init_type, init_label) in enumerate(init_configs):
+        ax = fig.add_subplot(gs[2, col])
+        out_dir = INIT_DIRS['multi'].get(init_type, '')
+        results = load_results(out_dir)
+        val_loss_str = f"{results.get('final_val_loss', 0):.2e}" if results else "N/A"
+        title = f'Multi-Plane: {init_label}'
+        plot_single_init_single_task(ax, init_type, 'multi', title, val_loss=val_loss_str)
+        add_panel_label(ax, panel_labels_r3[col])
     
-    bars = ax3.bar(np.arange(len(model_order)), s_losses, color=bar_colors,
-                   edgecolor='black', linewidth=0.6)
-    ax3.set_yscale('log')
-    ax3.set_xticks(np.arange(len(model_order)))
-    ax3.set_xticklabels(model_labels, fontsize=9)
-    ax3.set_ylabel('Final Validation Loss (log)')
-    ax3.set_title('(c) Single-Plane Final Loss', fontweight='bold')
-    for i, v in enumerate(s_losses):
-        ax3.text(i, v * 1.3, f'{v:.1e}', ha='center', va='bottom', fontsize=7, fontweight='bold')
-    
-    # (d) Multi-plane final loss bar chart
-    ax4 = fig.add_subplot(gs[1, 1])
-    m_losses = []
-    for m in model_order:
-        r = load_results(NEAR_PI_DIRS['multi'][m])
-        m_losses.append(r.get('final_val_loss', r.get('best_val_loss', 1.0)) if r else 1.0)
-    
-    bars = ax4.bar(np.arange(len(model_order)), m_losses, color=bar_colors,
-                   edgecolor='black', linewidth=0.6)
-    ax4.set_yscale('log')
-    ax4.set_xticks(np.arange(len(model_order)))
-    ax4.set_xticklabels(model_labels, fontsize=9)
-    ax4.set_ylabel('Final Validation Loss (log)')
-    ax4.set_title('(d) Multi-Plane Final Loss', fontweight='bold')
-    for i, v in enumerate(m_losses):
-        ax4.text(i, v * 1.3, f'{v:.1e}', ha='center', va='bottom', fontsize=7, fontweight='bold')
-    
-    # (e) Grouped comparison: single vs multi for geometric models
-    ax5 = fig.add_subplot(gs[1, 2])
-    geo_models = ['DDL', 'JPmHC', 'E∆-MHC-Geo']
-    geo_labels = ['DDL', 'JPmHC', 'E∆']
-    geo_colors = [COLORS[m] for m in geo_models]
-    x_pos = np.arange(len(geo_models))
-    width = 0.35
-    
-    s_geo = []
-    m_geo = []
-    for m in geo_models:
-        rs = load_results(NEAR_PI_DIRS['single'][m])
-        rm = load_results(NEAR_PI_DIRS['multi'][m])
-        s_geo.append(rs.get('final_val_loss', rs.get('best_val_loss', 1.0)) if rs else 1.0)
-        m_geo.append(rm.get('final_val_loss', rm.get('best_val_loss', 1.0)) if rm else 1.0)
-    
-    b1 = ax5.bar(x_pos - width/2, s_geo, width, label='Single-Plane',
-                 color=[COLORS[m] for m in geo_models], alpha=0.55,
-                 edgecolor='black', linewidth=0.6)
-    b2 = ax5.bar(x_pos + width/2, m_geo, width, label='Multi-Plane',
-                 color=[COLORS[m] for m in geo_models],
-                 edgecolor='black', linewidth=0.6)
-    ax5.set_yscale('log')
-    ax5.set_xticks(x_pos)
-    ax5.set_xticklabels(geo_labels, fontsize=9)
-    ax5.set_ylabel('Final Validation Loss (log)')
-    ax5.set_title('(e) Geometric Models Comparison', fontweight='bold')
-    ax5.legend(fontsize=8, loc='upper left')
-    
-    fig.suptitle('Near-π Rotation Analysis: All Geometric Models Excel on Pure Rotation',
-                fontsize=14, fontweight='bold', y=0.97)
+    fig.suptitle('Near-π Rotation Analysis: Training Curves & Per-Layer Gate Adaptation',
+                fontsize=14, fontweight='bold', y=0.98)
     
     return fig
 
