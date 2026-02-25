@@ -50,6 +50,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.models.baseline_gpt import GPT as BaselineGPT, GPTConfig as BaselineConfig
 from src.models.ddl import GPT as DDLGPT, GPTConfig as DDLConfig
 from src.models.mhc import GPT as mHCGPT, GPTConfig as mHCConfig
+from src.models.jpmhc import GPT as JPmHCGPT, GPTConfig as JPmHCConfig
 from src.models.edelta_hybrid import GPT as EdeltaGPT, GPTConfig as EdeltaConfig
 
 
@@ -136,7 +137,7 @@ def get_args():
     
     # Model
     parser.add_argument('--model_type', type=str, default='gpt2',
-                        choices=['gpt2', 'ddl', 'mhc', 'edelta'],
+                        choices=['gpt2', 'ddl', 'mhc', 'jpmhc', 'edelta'],
                         help='Model architecture to train')
     
     # Data
@@ -214,9 +215,10 @@ def create_model(args, input_dim: int, block_size: int):
     
     # Map baseline n_layer to match E∆-MHC-Geo's param count (keeping n_embd=128)
     BASELINE_NLAYER_FOR_MATCH = {
-        'gpt2': 9,   # 1.780M params (0.996x)
-        'ddl': 8,    # 1.784M params (0.998x)
-        'mhc': 9,    # 1.838M params (1.028x)
+        'gpt2': 9,    # 1.780M params (0.996x)
+        'ddl': 8,     # 1.784M params (0.998x)
+        'mhc': 9,     # 1.838M params (1.028x)
+        'jpmhc': 9,   # 1.896M params (1.061x)
     }
     
     if args.match_proposed_params and args.model_type != 'edelta':
@@ -268,6 +270,23 @@ def create_model(args, input_dim: int, block_size: int):
         )
         core = mHCGPT(config)
         
+    elif args.model_type == 'jpmhc':
+        print(f"\n=== JPmHC (Cayley Retraction Baseline) ===")
+        print(f"  Reference: arXiv:2602.18308")
+        config = JPmHCConfig(
+            n_layer=n_layer,
+            n_head=args.n_head,
+            n_embd=n_embd,
+            n_streams=args.n_streams,
+            dropout=args.dropout,
+            bias=False,
+            block_size=block_size,
+            vocab_size=1,
+            cayley_alpha=0.1,
+            cayley_iters=2,
+        )
+        core = JPmHCGPT(config)
+
     elif args.model_type == 'edelta':
         print(f"\n=== E∆-MHC-Geo (Proposed) ===")
         print(f"  init_gate_bias: {args.init_gate_bias}")

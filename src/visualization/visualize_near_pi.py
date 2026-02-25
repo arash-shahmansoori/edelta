@@ -65,6 +65,7 @@ COLORS = {
     'GPT': '#0072B2',         # Blue
     'DDL': '#D55E00',         # Vermillion/Orange
     'mHC': '#CC79A7',         # Reddish Purple
+    'JPmHC': '#E69F00',       # Amber
     'E∆-MHC-Geo': '#009E73',  # Bluish Green
 }
 
@@ -79,22 +80,24 @@ MARKERS = {
     'GPT': 'o',
     'DDL': 's',
     'mHC': '^',
+    'JPmHC': 'v',
     'E∆-MHC-Geo': 'D',
 }
 
-# Output directories for baseline comparison
 NEAR_PI_DIRS = {
     'single': {
-        'GPT': 'out-near-pi-single-gpt',
-        'DDL': 'out-near-pi-single-ddl',
-        'mHC': 'out-near-pi-single-mhc',
-        'E∆-MHC-Geo': 'out-near-pi-single-edelta',
+        'GPT': 'out-matched/near_pi_rotation-baseline',
+        'DDL': 'out-matched/near_pi_rotation-ddl',
+        'mHC': 'out-matched/near_pi_rotation-mhc',
+        'JPmHC': 'out-matched/near_pi_rotation-jpmhc',
+        'E∆-MHC-Geo': 'out-matched/near_pi_rotation-proposed',
     },
     'multi': {
-        'GPT': 'out-near-pi-multi-gpt',
-        'DDL': 'out-near-pi-multi-ddl',
-        'mHC': 'out-near-pi-multi-mhc',
-        'E∆-MHC-Geo': 'out-near-pi-multi-edelta',
+        'GPT': 'out-matched/near_pi_rotation_multiplane-baseline',
+        'DDL': 'out-matched/near_pi_rotation_multiplane-ddl',
+        'mHC': 'out-matched/near_pi_rotation_multiplane-mhc',
+        'JPmHC': 'out-matched/near_pi_rotation_multiplane-jpmhc',
+        'E∆-MHC-Geo': 'out-matched/near_pi_rotation_multiplane-proposed',
     },
 }
 
@@ -148,7 +151,7 @@ def plot_training_curves(ax, dataset_key, title):
     max_iter = 0
     
     # Enhanced line styles for publication
-    linewidths = {'GPT': 2.2, 'DDL': 2.2, 'mHC': 2.2, 'E∆-MHC-Geo': 2.8}
+    linewidths = {'GPT': 2.2, 'DDL': 2.2, 'mHC': 2.2, 'JPmHC': 2.2, 'E∆-MHC-Geo': 2.8}
     
     for model_name, out_dir in dirs.items():
         log = load_training_log(out_dir)
@@ -369,9 +372,12 @@ def add_panel_label(ax, label, x=-0.12, y=1.08):
 
 
 def create_near_pi_figure():
-    """Create publication-quality near-π rotation figure with comprehensive analysis."""
+    """Create publication-quality near-π rotation figure.
     
-    # Use high DPI and publication-quality settings
+    Layout: Row 1 = training curves, Row 2 = final loss bar chart + summary.
+    Init robustness panels removed (data not available in current directory structure).
+    """
+    
     plt.rcParams.update({
         'font.family': 'sans-serif',
         'font.size': 9,
@@ -384,14 +390,12 @@ def create_near_pi_figure():
         'ytick.minor.width': 0.6,
     })
     
-    fig = plt.figure(figsize=(15, 13))
+    fig = plt.figure(figsize=(15, 9))
+    gs = gridspec.GridSpec(2, 3, figure=fig,
+                          hspace=0.35, wspace=0.30,
+                          left=0.07, right=0.95, top=0.91, bottom=0.08)
     
-    # Use GridSpec for 3x3 layout with refined spacing
-    gs = gridspec.GridSpec(3, 3, figure=fig, 
-                          hspace=0.32, wspace=0.25,
-                          left=0.07, right=0.95, top=0.92, bottom=0.06)
-    
-    # ========== Row 1: Baseline Comparison ==========
+    # ========== Row 1: Training Curves ==========
     ax1 = fig.add_subplot(gs[0, 0])
     plot_training_curves(ax1, 'single', 'Single-Plane Near-π (θ=177.6°)')
     add_panel_label(ax1, '(a)')
@@ -400,71 +404,113 @@ def create_near_pi_figure():
     plot_training_curves(ax2, 'multi', 'Multi-Plane Near-π (θ=179.9°)')
     add_panel_label(ax2, '(b)')
     
-    # Summary panel with comprehensive results
+    # Summary panel with ALL models including JPmHC and E∆
     ax_summary = fig.add_subplot(gs[0, 2])
     ax_summary.axis('off')
-    summary_text = (
-        "━━━ Performance Summary ━━━\n\n"
-        "Baseline Comparison (a-b):\n"
-        "┌─────────────┬────────────┐\n"
-        "│ Single-Plane │ Multi-Plane │\n"
-        "├─────────────┼────────────┤\n"
-        "│ DDL: 1.16e-5 │ DDL: 4.85e-6│\n"
-        "│ GPT: 1.20e-5 │ GPT: 4.93e-6│\n"
-        "│ mHC: 9.83e-3 │ mHC: 1.55e-2│\n"
-        "└─────────────┴────────────┘\n\n"
-        "Init Robustness (c-h):\n"
-        "┌─────────────┬────────────┐\n"
-        "│ S: 2.1-2.9e-6│ M: 1.0-1.6e-6│\n"
-        "└─────────────┴────────────┘\n"
-        "All inits achieve ~10⁻⁶ loss"
-    )
+    
+    single_results = {}
+    multi_results = {}
+    display_names = [('GPT', 'GPT'), ('DDL', 'DDL'), ('mHC', 'mHC'),
+                     ('JPmHC', 'JPmHC'), ('E∆-MHC-Geo', 'E∆')]
+    for dir_key, label in display_names:
+        sr = load_results(NEAR_PI_DIRS['single'].get(dir_key, ''))
+        mr = load_results(NEAR_PI_DIRS['multi'].get(dir_key, ''))
+        if sr:
+            single_results[label] = sr.get('final_val_loss', sr.get('best_val_loss', None))
+        if mr:
+            multi_results[label] = mr.get('final_val_loss', mr.get('best_val_loss', None))
+    
+    lines = ["━━ Performance Summary ━━\n",
+             "Final Validation Loss:\n",
+             "┌──────────┬───────────┬───────────┐",
+             "│  Model   │ Single-Pl │ Multi-Pl  │",
+             "├──────────┼───────────┼───────────┤"]
+    for label in ['GPT', 'DDL', 'mHC', 'JPmHC', 'E∆']:
+        sv = single_results.get(label)
+        mv = multi_results.get(label)
+        s_str = f"{sv:.2e}" if sv else "N/A"
+        m_str = f"{mv:.2e}" if mv else "N/A"
+        mn_pad = f"{label:<8}"
+        lines.append(f"│ {mn_pad} │ {s_str:>9} │ {m_str:>9} │")
+    lines.append("└──────────┴───────────┴───────────┘")
+    lines.append("\nAll SO(n) models excel at\nnear-π rotation (no negation).")
+    
+    summary_text = "\n".join(lines)
     ax_summary.text(0.5, 0.5, summary_text, ha='center', va='center',
-                   fontsize=8.5, family='monospace',
-                   bbox=dict(boxstyle='round,pad=0.6', facecolor='#f5f9ff', 
+                   fontsize=8, family='monospace',
+                   bbox=dict(boxstyle='round,pad=0.6', facecolor='#f5f9ff',
                             edgecolor='#2166AC', alpha=0.98, linewidth=2))
     
-    # ========== Row 2: Single-Plane Gate Evolution ==========
+    # ========== Row 2: Final Loss Bar Charts ==========
+    model_order = ['GPT', 'DDL', 'mHC', 'JPmHC', 'E∆-MHC-Geo']
+    model_labels = ['GPT', 'DDL', 'mHC', 'JPmHC', 'E∆']
+    bar_colors = [COLORS[m] for m in model_order]
+    
+    # (c) Single-plane final loss bar chart
     ax3 = fig.add_subplot(gs[1, 0])
-    plot_single_init_single_task(ax3, 'cayley', 'single', 
-                                 'Single-Plane: γ₀=0.82 (Cayley Bias)', val_loss='2.10e-6')
-    add_panel_label(ax3, '(c)')
+    s_losses = []
+    for m in model_order:
+        r = load_results(NEAR_PI_DIRS['single'][m])
+        s_losses.append(r.get('final_val_loss', r.get('best_val_loss', 1.0)) if r else 1.0)
     
+    bars = ax3.bar(np.arange(len(model_order)), s_losses, color=bar_colors,
+                   edgecolor='black', linewidth=0.6)
+    ax3.set_yscale('log')
+    ax3.set_xticks(np.arange(len(model_order)))
+    ax3.set_xticklabels(model_labels, fontsize=9)
+    ax3.set_ylabel('Final Validation Loss (log)')
+    ax3.set_title('(c) Single-Plane Final Loss', fontweight='bold')
+    for i, v in enumerate(s_losses):
+        ax3.text(i, v * 1.3, f'{v:.1e}', ha='center', va='bottom', fontsize=7, fontweight='bold')
+    
+    # (d) Multi-plane final loss bar chart
     ax4 = fig.add_subplot(gs[1, 1])
-    plot_single_init_single_task(ax4, 'neutral', 'single', 
-                                 'Single-Plane: γ₀=0.50 (Neutral)', val_loss='2.20e-6')
-    add_panel_label(ax4, '(d)')
+    m_losses = []
+    for m in model_order:
+        r = load_results(NEAR_PI_DIRS['multi'][m])
+        m_losses.append(r.get('final_val_loss', r.get('best_val_loss', 1.0)) if r else 1.0)
     
+    bars = ax4.bar(np.arange(len(model_order)), m_losses, color=bar_colors,
+                   edgecolor='black', linewidth=0.6)
+    ax4.set_yscale('log')
+    ax4.set_xticks(np.arange(len(model_order)))
+    ax4.set_xticklabels(model_labels, fontsize=9)
+    ax4.set_ylabel('Final Validation Loss (log)')
+    ax4.set_title('(d) Multi-Plane Final Loss', fontweight='bold')
+    for i, v in enumerate(m_losses):
+        ax4.text(i, v * 1.3, f'{v:.1e}', ha='center', va='bottom', fontsize=7, fontweight='bold')
+    
+    # (e) Grouped comparison: single vs multi for geometric models
     ax5 = fig.add_subplot(gs[1, 2])
-    plot_single_init_single_task(ax5, 'householder', 'single', 
-                                 'Single-Plane: γ₀=0.18 (HH Bias)', val_loss='2.94e-6')
-    add_panel_label(ax5, '(e)')
+    geo_models = ['DDL', 'JPmHC', 'E∆-MHC-Geo']
+    geo_labels = ['DDL', 'JPmHC', 'E∆']
+    geo_colors = [COLORS[m] for m in geo_models]
+    x_pos = np.arange(len(geo_models))
+    width = 0.35
     
-    # ========== Row 3: Multi-Plane Gate Evolution ==========
-    ax6 = fig.add_subplot(gs[2, 0])
-    plot_single_init_single_task(ax6, 'cayley', 'multi', 
-                                 'Multi-Plane: γ₀=0.82 (Cayley Bias)', val_loss='1.27e-6')
-    add_panel_label(ax6, '(f)')
+    s_geo = []
+    m_geo = []
+    for m in geo_models:
+        rs = load_results(NEAR_PI_DIRS['single'][m])
+        rm = load_results(NEAR_PI_DIRS['multi'][m])
+        s_geo.append(rs.get('final_val_loss', rs.get('best_val_loss', 1.0)) if rs else 1.0)
+        m_geo.append(rm.get('final_val_loss', rm.get('best_val_loss', 1.0)) if rm else 1.0)
     
-    ax7 = fig.add_subplot(gs[2, 1])
-    plot_single_init_single_task(ax7, 'neutral', 'multi', 
-                                 'Multi-Plane: γ₀=0.50 (Neutral)', val_loss='1.62e-6')
-    add_panel_label(ax7, '(g)')
+    b1 = ax5.bar(x_pos - width/2, s_geo, width, label='Single-Plane',
+                 color=[COLORS[m] for m in geo_models], alpha=0.55,
+                 edgecolor='black', linewidth=0.6)
+    b2 = ax5.bar(x_pos + width/2, m_geo, width, label='Multi-Plane',
+                 color=[COLORS[m] for m in geo_models],
+                 edgecolor='black', linewidth=0.6)
+    ax5.set_yscale('log')
+    ax5.set_xticks(x_pos)
+    ax5.set_xticklabels(geo_labels, fontsize=9)
+    ax5.set_ylabel('Final Validation Loss (log)')
+    ax5.set_title('(e) Geometric Models Comparison', fontweight='bold')
+    ax5.legend(fontsize=8, loc='upper left')
     
-    ax8 = fig.add_subplot(gs[2, 2])
-    plot_single_init_single_task(ax8, 'householder', 'multi', 
-                                 'Multi-Plane: γ₀=0.18 (HH Bias)', val_loss='9.80e-7')
-    add_panel_label(ax8, '(h)')
-    
-    # ========== Main Title ==========
-    fig.suptitle('Near-π Rotation Analysis: Adaptive Per-Layer Gating Achieves Optimal Performance', 
+    fig.suptitle('Near-π Rotation Analysis: All Geometric Models Excel on Pure Rotation',
                 fontsize=14, fontweight='bold', y=0.97)
-    
-    # ========== Row Labels ==========
-    fig.text(0.025, 0.62, 'Single-Plane\n(2/64 eigenvalues)', ha='center', va='center',
-            fontsize=10, fontweight='bold', rotation=90, color='#0072B2')
-    fig.text(0.025, 0.25, 'Multi-Plane\n(64/64 eigenvalues)', ha='center', va='center',
-            fontsize=10, fontweight='bold', rotation=90, color='#009E73')
     
     return fig
 
@@ -485,7 +531,7 @@ def create_summary_table():
         print("-" * 70)
         
         edelta_loss = None
-        for model in ['GPT', 'DDL', 'mHC', 'E∆-MHC-Geo']:
+        for model in ['GPT', 'DDL', 'mHC', 'JPmHC', 'E∆-MHC-Geo']:
             results = load_results(NEAR_PI_DIRS[dataset_key][model])
             if results:
                 val_loss = results.get('final_val_loss', results.get('best_val_loss', 'N/A'))
@@ -535,24 +581,16 @@ def create_summary_table():
 def main():
     os.chdir(Path(__file__).parent.parent.parent)
     
-    # Check if output directories exist
     missing = []
     for dataset_key, dirs in NEAR_PI_DIRS.items():
         for model, path in dirs.items():
             if not os.path.exists(path):
                 missing.append(f"baseline/{dataset_key}/{model}: {path}")
     
-    for dataset_key, dirs in INIT_DIRS.items():
-        for init_type, path in dirs.items():
-            if not os.path.exists(path):
-                missing.append(f"init/{dataset_key}/{init_type}: {path}")
-    
     if missing:
-        print("Warning: Missing output directories:")
+        print("Warning: Missing baseline output directories:")
         for m in missing[:10]:
             print(f"  - {m}")
-        if len(missing) > 10:
-            print(f"  ... and {len(missing)-10} more")
         print("\nRun experiments first with train_continuous.py")
     
     # Print summary table

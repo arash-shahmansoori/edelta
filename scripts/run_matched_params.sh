@@ -10,6 +10,7 @@
 #   GPT:        n_layer=9 → 1.780M (0.996x)
 #   DDL:        n_layer=8 → 1.784M (0.998x)
 #   mHC:        n_layer=9 → 1.838M (1.028x)
+#   JPmHC:      n_layer=9 → 1.896M (1.061x)
 
 set -e
 
@@ -19,6 +20,7 @@ echo "============================================================"
 echo "All models: n_embd=128 (same representation dimension)"
 echo "E∆-MHC-Geo: n_layer=6 (with geometric operators)"
 echo "Baselines:  n_layer scaled up (more depth to compensate)"
+echo "  GPT:   9L  DDL: 8L  mHC: 9L  JPmHC: 9L"
 echo "============================================================"
 
 # Verify datasets exist
@@ -95,6 +97,19 @@ uv run src/training/train_continuous.py \
     --batch_size $BATCH_SIZE \
     --match_proposed_params
 
+# JPmHC (n_layer scaled to 9)
+echo "Training JPmHC (n_layer=9, ~1.89M params) on gyroscope..."
+uv run src/training/train_continuous.py \
+    --model_type jpmhc \
+    --dataset gyroscope \
+    --out_dir out-matched/gyroscope-jpmhc \
+    --max_iters $MAX_ITERS \
+    --n_layer $N_LAYER \
+    --n_head $N_HEAD \
+    --n_embd $N_EMBD \
+    --batch_size $BATCH_SIZE \
+    --match_proposed_params
+
 # E∆-MHC-Geo (n_layer=6, full design, ~1.79M params)
 echo "Training E∆-MHC-Geo (n_layer=6, ~1.79M params) on gyroscope..."
 uv run src/training/train_continuous.py \
@@ -143,6 +158,19 @@ uv run src/training/train_continuous.py \
     --model_type mhc \
     --dataset stability \
     --out_dir out-matched/stability-mhc \
+    --max_iters $MAX_ITERS \
+    --n_layer $N_LAYER \
+    --n_head $N_HEAD \
+    --n_embd $N_EMBD \
+    --batch_size $BATCH_SIZE \
+    --match_proposed_params
+
+# JPmHC (n_layer scaled to 9)
+echo "Training JPmHC (n_layer=9, ~1.89M params) on stability..."
+uv run src/training/train_continuous.py \
+    --model_type jpmhc \
+    --dataset stability \
+    --out_dir out-matched/stability-jpmhc \
     --max_iters $MAX_ITERS \
     --n_layer $N_LAYER \
     --n_head $N_HEAD \

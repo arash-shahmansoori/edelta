@@ -24,6 +24,10 @@ NOTE: We exclude GPT and mHC as they rely on MLP approximation rather than
 geometric operators - this would be "cheating" as the MLP can learn any
 function without the geometric inductive bias we're testing.
 
+JPmHC is included as an SO(n)-only baseline: its iterative Cayley retraction
+can only produce rotations (det=+1), so it should FAIL at exact negation
+(which requires eigenvalue -1). This validates the need for E∆'s hybrid.
+
 Usage (run from project root with uv):
     # Run sample efficiency test (main experiment)
     uv run src/training/train_reflection.py --mode sample_efficiency --save_figures
@@ -93,6 +97,7 @@ COLORS = {
     'GPT': '#0072B2',        # Blue
     'DDL': '#D55E00',        # Vermillion
     'mHC': '#E69F00',        # Amber
+    'JPmHC': '#CC79A7',      # Reddish Purple
     'E∆-MHC-Geo': '#009E73', # Bluish Green
 }
 
@@ -100,6 +105,7 @@ MARKERS = {
     'GPT': 'o',
     'DDL': 's',
     'mHC': '^',
+    'JPmHC': 'v',
     'E∆-MHC-Geo': 'D',
 }
 
@@ -349,6 +355,69 @@ class SimpleMHC(nn.Module):
         return out.squeeze(0) if B == 1 and x.dim() == 1 else out
 
 
+class SimpleJPmHC(nn.Module):
+    """
+    JPmHC-style model: y = Q(x) · x where Q is from iterative Cayley retraction.
+
+    Reference: Sengupta, Wang & Brunswic, arXiv:2602.18308
+
+    The iterative Cayley retraction produces approximately orthogonal matrices
+    in SO(n) (det ≈ +1). Since Cayley CANNOT produce eigenvalue -1
+    (Theorem: exclusion), this model should FAIL at y = -x.
+
+    This validates E∆-MHC-Geo's hybrid approach: SO(n)-only methods
+    fundamentally cannot handle negation tasks.
+    """
+
+    def __init__(self, dim: int, hidden_dim: int = HIDDEN_DIM,
+                 cayley_alpha: float = 0.1, cayley_iters: int = 2):
+        super().__init__()
+        self.dim = dim
+        self.cayley_alpha = cayley_alpha
+        self.cayley_iters = cayley_iters
+
+        self.W_net = nn.Sequential(
+            nn.Linear(dim, hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, dim * dim),
+        )
+
+    def iterative_cayley(self, W_raw):
+        """
+        Iterative fixed-point Cayley retraction (JPmHC Algorithm 3).
+        Y_0 = I; Y_{i+1} = I + (α/2) W (I + Y_i)
+        """
+        W = W_raw - W_raw.transpose(-1, -2)
+
+        n = W.shape[-1]
+        I = torch.eye(n, device=W.device, dtype=W.dtype)
+        Y = I.expand_as(W).clone()
+        for _ in range(self.cayley_iters):
+            Y = I + (self.cayley_alpha / 2) * torch.matmul(W, I + Y)
+        return Y
+
+    def forward(self, x):
+        B = x.shape[0] if x.dim() > 1 else 1
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
+
+        W_raw = self.W_net(x).view(B, self.dim, self.dim)
+        Q = self.iterative_cayley(W_raw)
+        out = torch.einsum('bij,bj->bi', Q, x)
+        return out.squeeze(0) if B == 1 else out
+
+    def get_orthogonality_error(self, x):
+        """Report ||Q^T Q - I||_max for diagnostics."""
+        B = x.shape[0] if x.dim() > 1 else 1
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
+        W_raw = self.W_net(x).view(B, self.dim, self.dim)
+        Q = self.iterative_cayley(W_raw)
+        QtQ = torch.matmul(Q.transpose(-1, -2), Q)
+        I = torch.eye(self.dim, device=x.device, dtype=x.dtype)
+        return (QtQ - I).abs().max().item()
+
+
 # =============================================================================
 # TRAINING AND ANALYSIS
 # =============================================================================
@@ -445,7 +514,15 @@ def train_and_analyze(
                 flush_print(f"  Gate: mean={param_info['gate_mean']:.4f}, std={param_info['gate_std']:.4f}")
                 if param_info['gate_mean'] < 0.2:
                     flush_print(f"  ✓ Gate → 0 (learned to use Householder!)")
-    
+
+    if hasattr(model, 'get_orthogonality_error'):
+        with torch.no_grad():
+            orth_err = model.get_orthogonality_error(val_x[:100])
+            param_info['orth_error'] = orth_err
+            if verbose:
+                flush_print(f"  Orthogonality error: {orth_err:.6f}")
+                flush_print(f"  ✗ SO(n) only — cannot produce eigenvalue -1")
+
     return {
         'model_name': model_name,
         'n_params': n_params,
@@ -506,6 +583,8 @@ def train_with_trajectory(
     if hasattr(model, 'get_gate'):
         trajectory['gate_mean'] = []
         trajectory['gate_std'] = []
+    if hasattr(model, 'get_orthogonality_error'):
+        trajectory['orth_error'] = []
     
     best_val_loss = float('inf')
     
@@ -556,6 +635,10 @@ def train_with_trajectory(
                     gates = model.get_gate(val_x[:100])
                     trajectory['gate_mean'].append(gates.mean().item())
                     trajectory['gate_std'].append(gates.std().item())
+
+                if hasattr(model, 'get_orthogonality_error'):
+                    orth_err = model.get_orthogonality_error(val_x[:100])
+                    trajectory['orth_error'].append(orth_err)
                 
                 if verbose and (iter_num + 1) % (track_interval * 4) == 0:
                     param_str = ""
@@ -563,6 +646,8 @@ def train_with_trajectory(
                         param_str = f", β={trajectory['beta_mean'][-1]:.3f}"
                     if 'gate_mean' in trajectory:
                         param_str = f", γ={trajectory['gate_mean'][-1]:.3f}"
+                    if 'orth_error' in trajectory:
+                        param_str = f", orth_err={trajectory['orth_error'][-1]:.6f}"
                     flush_print(f"  Step {iter_num+1:4d}: loss={loss.item():.6f}, "
                                f"neg_acc={neg_acc:.4f}{param_str}")
     
@@ -593,6 +678,13 @@ def train_with_trajectory(
         if verbose:
             status = "✓ CONVERGED" if param_info['gate_converged'] else "✗ NOT converged"
             flush_print(f"  Final γ: {param_info['gate_mean']:.4f} ± {param_info['gate_std']:.4f} {status}")
+
+    if hasattr(model, 'get_orthogonality_error'):
+        orth_err = model.get_orthogonality_error(val_x[:100])
+        param_info['orth_error'] = orth_err
+        if verbose:
+            flush_print(f"  Orthogonality error: {orth_err:.6f}")
+            flush_print(f"  ✗ SO(n) only — CANNOT produce eigenvalue -1 for negation")
     
     return {
         'model_name': model_name,
@@ -636,19 +728,20 @@ def run_sample_efficiency_test(
     flush_print("\n" + "="*80)
     flush_print("REFLECTION EXPERIMENT: Geometric Operator Analysis")
     flush_print("="*80)
-    flush_print("Testing: DDL (β → 2) vs E∆-MHC-Geo (γ → 0)")
+    flush_print("Testing: DDL (β → 2) vs JPmHC (SO(n) only) vs E∆-MHC-Geo (γ → 0)")
     flush_print("Task: Learn y = -x (pure negation/reflection)")
     flush_print("")
     flush_print("Following arXiv:2601.00514v1 'Illusion of Insight' methodology:")
     flush_print("  - Track parameter trajectories during training")
     flush_print("  - Measure convergence to optimal values (β=2, γ=0)")
+    flush_print("  - JPmHC: SO(n)-only baseline (should FAIL — no eigenvalue -1)")
     flush_print("  - Analyze accuracy conditional on parameter state\n")
     
     # Fixed validation set
     val_x, val_y = generate_negation_data(500, dim, device, seed=999)
     
     results = {size: {} for size in sample_sizes}
-    model_names = ['DDL', 'E∆-MHC-Geo']  # Only geometric operators
+    model_names = ['DDL', 'JPmHC', 'E∆-MHC-Geo']
     
     for n_samples in sample_sizes:
         flush_print(f"\n{'='*60}")
@@ -659,6 +752,7 @@ def run_sample_efficiency_test(
         
         models = {
             'DDL': SimpleDDL(dim).to(device),
+            'JPmHC': SimpleJPmHC(dim).to(device),
             'E∆-MHC-Geo': SimpleHybrid(dim).to(device),
         }
         
@@ -682,19 +776,22 @@ def run_sample_efficiency_test(
     flush_print("RESULTS SUMMARY")
     flush_print("="*80)
     
-    flush_print(f"\n{'Samples':<10}{'DDL Acc':<12}{'DDL β':<12}{'E∆ Acc':<12}{'E∆ γ':<12}")
-    flush_print("-" * 58)
+    flush_print(f"\n{'Samples':<10}{'DDL Acc':<12}{'DDL β':<12}{'JPmHC Acc':<12}{'E∆ Acc':<12}{'E∆ γ':<12}")
+    flush_print("-" * 70)
     
     for n_samples in sample_sizes:
         ddl = results[n_samples]['DDL']
+        jpmhc = results[n_samples]['JPmHC']
         edelta = results[n_samples]['E∆-MHC-Geo']
         
         ddl_acc = ddl['negation_accuracy']
         ddl_beta = ddl['param_info'].get('beta_mean', 0)
+        jpmhc_acc = jpmhc['negation_accuracy']
         edelta_acc = edelta['negation_accuracy']
         edelta_gate = edelta['param_info'].get('gate_mean', 1)
         
         flush_print(f"{n_samples:<10}{ddl_acc:>8.4f}    {ddl_beta:>8.4f}    "
+                   f"{jpmhc_acc:>8.4f}    "
                    f"{edelta_acc:>8.4f}    {edelta_gate:>8.4f}")
     
     # Parameter convergence analysis
@@ -702,6 +799,7 @@ def run_sample_efficiency_test(
     flush_print("PARAMETER CONVERGENCE ANALYSIS")
     flush_print("="*80)
     flush_print("\nDDL: β should converge to 2.0 for exact Householder reflection")
+    flush_print("JPmHC: SO(n) only — CANNOT converge (no eigenvalue -1 mechanism)")
     flush_print("E∆-MHC-Geo: γ should converge to 0.0 to use Householder component\n")
     
     for name in model_names:
@@ -739,11 +837,10 @@ def create_reflection_figures(results, sample_sizes, model_names, output_dir='re
     
     os.makedirs(output_dir, exist_ok=True)
     
-    # Figure 1: Parameter Trajectories (most important for "Aha!" analysis)
-    # Use the largest sample size for best trajectory visualization
+    # Figure 1: Parameter Trajectories (2x3 grid including JPmHC)
     largest_n = max(sample_sizes)
     
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+    fig, axes = plt.subplots(2, 3, figsize=(16, 10))
     
     # (a) DDL β trajectory
     ax1 = axes[0, 0]
@@ -759,49 +856,91 @@ def create_reflection_figures(results, sample_sizes, model_names, output_dir='re
     ax1.set_ylabel('β Value')
     ax1.set_title(f'(a) DDL: β Trajectory ({largest_n} samples)', fontweight='bold')
     ax1.set_ylim(0, 2.2)
-    ax1.legend(loc='lower right')
+    ax1.legend(loc='lower right', fontsize=8)
     
-    # (b) E∆-MHC-Geo gate trajectory
+    # (b) JPmHC: accuracy + loss trajectory (demonstrating SO(n) failure)
     ax2 = axes[0, 1]
+    traj_jp = results[largest_n]['JPmHC']['trajectory']
+    ax2.plot(traj_jp['iter'], traj_jp['negation_accuracy'],
+            color=COLORS['JPmHC'], linewidth=2, label='Neg. Accuracy')
+    ax2.axhline(y=0.95, color='red', linestyle=':', linewidth=1, alpha=0.5, label='95% target')
+    ax2.axhline(y=0.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.3)
+    ax2_twin = ax2.twinx()
+    ax2_twin.plot(traj_jp['iter'], traj_jp['val_loss'],
+                 color=COLORS['JPmHC'], linewidth=1.5, linestyle='--', alpha=0.5, label='Val Loss')
+    ax2_twin.set_ylabel('Val Loss', color=COLORS['JPmHC'], alpha=0.6, fontsize=9)
+    ax2.set_xlabel('Training Iteration')
+    ax2.set_ylabel('Negation Accuracy')
+    ax2.set_title(f'(b) JPmHC: SO(n) Failure ({largest_n} samples)', fontweight='bold')
+    ax2.set_ylim(-1.15, 1.05)
+    ax2.legend(loc='upper right', fontsize=8)
+    ax2.annotate('SO(n) cannot negate', xy=(0.5, 0.03), xycoords='axes fraction',
+                ha='center', fontsize=9, color='#CC79A7', fontweight='bold')
+    
+    # (c) E∆-MHC-Geo gate trajectory
+    ax3 = axes[0, 2]
     traj = results[largest_n]['E∆-MHC-Geo']['trajectory']
-    ax2.plot(traj['iter'], traj['gate_mean'],
+    ax3.plot(traj['iter'], traj['gate_mean'],
             color=COLORS['E∆-MHC-Geo'], linewidth=2, label='γ (mean)')
-    ax2.fill_between(traj['iter'],
+    ax3.fill_between(traj['iter'],
                      np.array(traj['gate_mean']) - np.array(traj['gate_std']),
                      np.array(traj['gate_mean']) + np.array(traj['gate_std']),
                      color=COLORS['E∆-MHC-Geo'], alpha=0.2)
-    ax2.axhline(y=0.0, color='gray', linestyle='--', linewidth=1.5, label='γ = 0 (Householder)')
-    ax2.set_xlabel('Training Iteration')
-    ax2.set_ylabel('Gate Value (γ)')
-    ax2.set_title(f'(b) E∆-MHC-Geo: Gate Trajectory ({largest_n} samples)', fontweight='bold')
-    ax2.set_ylim(-0.05, 0.5)
-    ax2.legend(loc='upper right')
+    ax3.axhline(y=0.0, color='gray', linestyle='--', linewidth=1.5, label='γ = 0 (Householder)')
+    ax3.set_xlabel('Training Iteration')
+    ax3.set_ylabel('Gate Value (γ)')
+    ax3.set_title(f'(c) E∆-MHC-Geo: γ → 0 ({largest_n} samples)', fontweight='bold')
+    ax3.set_ylim(-0.05, 0.5)
+    ax3.legend(loc='upper right', fontsize=8)
     
-    # (c) DDL accuracy vs β during training
-    ax3 = axes[1, 0]
+    # (d) DDL accuracy vs β phase plot
+    ax4 = axes[1, 0]
     traj = results[largest_n]['DDL']['trajectory']
-    sc = ax3.scatter(traj['beta_mean'], traj['negation_accuracy'],
+    sc = ax4.scatter(traj['beta_mean'], traj['negation_accuracy'],
                     c=traj['iter'], cmap='viridis', s=50, alpha=0.8)
-    ax3.axvline(x=2.0, color='gray', linestyle='--', linewidth=1, alpha=0.7)
-    ax3.axhline(y=0.95, color='red', linestyle=':', linewidth=1, alpha=0.7)
-    ax3.set_xlabel('β Value')
-    ax3.set_ylabel('Negation Accuracy')
-    ax3.set_title('(c) DDL: Accuracy vs β', fontweight='bold')
-    ax3.set_xlim(0, 2.2)
-    cbar = plt.colorbar(sc, ax=ax3)
+    ax4.axvline(x=2.0, color='gray', linestyle='--', linewidth=1, alpha=0.7)
+    ax4.axhline(y=0.95, color='red', linestyle=':', linewidth=1, alpha=0.7)
+    ax4.set_xlabel('β Value')
+    ax4.set_ylabel('Negation Accuracy')
+    ax4.set_title('(d) DDL: Accuracy vs β', fontweight='bold')
+    ax4.set_xlim(0, 2.2)
+    cbar = plt.colorbar(sc, ax=ax4)
     cbar.set_label('Iteration')
     
-    # (d) E∆-MHC-Geo accuracy vs gate during training
-    ax4 = axes[1, 1]
+    # (e) JPmHC accuracy vs orth error (or vs iteration if no orth data)
+    ax5 = axes[1, 1]
+    traj_jp = results[largest_n]['JPmHC']['trajectory']
+    if 'orth_error' in traj_jp and len(traj_jp['orth_error']) > 0:
+        sc = ax5.scatter(traj_jp['orth_error'], traj_jp['negation_accuracy'],
+                        c=traj_jp['iter'], cmap='viridis', s=50, alpha=0.8)
+        ax5.set_xlabel('Orthogonality Error')
+        cbar = plt.colorbar(sc, ax=ax5)
+        cbar.set_label('Iteration')
+    else:
+        sc = ax5.scatter(traj_jp['iter'], traj_jp['negation_accuracy'],
+                        c=traj_jp['iter'], cmap='viridis', s=50, alpha=0.8)
+        ax5.set_xlabel('Training Iteration')
+        cbar = plt.colorbar(sc, ax=ax5)
+        cbar.set_label('Iteration')
+    ax5.axhline(y=0.0, color='gray', linestyle='--', linewidth=0.8, alpha=0.3)
+    ax5.axhline(y=0.95, color='red', linestyle=':', linewidth=1, alpha=0.7)
+    ax5.set_ylabel('Negation Accuracy')
+    ax5.set_title('(e) JPmHC: Accuracy (stuck negative)', fontweight='bold')
+    ax5.set_ylim(-1.15, 1.05)
+    ax5.annotate('Orthogonal but cannot reach\neigenvalue −1', xy=(0.5, 0.05),
+                xycoords='axes fraction', ha='center', fontsize=8, color='red', fontstyle='italic')
+    
+    # (f) E∆-MHC-Geo accuracy vs gate phase plot
+    ax6 = axes[1, 2]
     traj = results[largest_n]['E∆-MHC-Geo']['trajectory']
-    sc = ax4.scatter(traj['gate_mean'], traj['negation_accuracy'],
+    sc = ax6.scatter(traj['gate_mean'], traj['negation_accuracy'],
                     c=traj['iter'], cmap='viridis', s=50, alpha=0.8)
-    ax4.axvline(x=0.0, color='gray', linestyle='--', linewidth=1, alpha=0.7)
-    ax4.axhline(y=0.95, color='red', linestyle=':', linewidth=1, alpha=0.7)
-    ax4.set_xlabel('Gate Value (γ)')
-    ax4.set_ylabel('Negation Accuracy')
-    ax4.set_title('(d) E∆-MHC-Geo: Accuracy vs γ', fontweight='bold')
-    cbar = plt.colorbar(sc, ax=ax4)
+    ax6.axvline(x=0.0, color='gray', linestyle='--', linewidth=1, alpha=0.7)
+    ax6.axhline(y=0.95, color='red', linestyle=':', linewidth=1, alpha=0.7)
+    ax6.set_xlabel('Gate Value (γ)')
+    ax6.set_ylabel('Negation Accuracy')
+    ax6.set_title('(f) E∆-MHC-Geo: Accuracy vs γ', fontweight='bold')
+    cbar = plt.colorbar(sc, ax=ax6)
     cbar.set_label('Iteration')
     
     fig.suptitle('Parameter Trajectories During Training\n(Following arXiv:2601.00514v1 methodology)', 
@@ -825,9 +964,10 @@ def create_reflection_figures(results, sample_sizes, model_names, output_dir='re
     ax1.axhline(y=0.95, color='gray', linestyle='--', linewidth=1.5, alpha=0.7, label='95% threshold')
     ax1.set_xlabel('Number of Training Samples', fontsize=12)
     ax1.set_ylabel('Negation Accuracy', fontsize=12)
-    ax1.set_title('(a) Sample Efficiency: DDL vs E∆-MHC-Geo', fontweight='bold')
-    ax1.set_ylim(-0.1, 1.05)
-    ax1.legend(loc='lower right', fontsize=10)
+    ax1.set_title('(a) Sample Efficiency: DDL vs JPmHC vs E∆-MHC-Geo', fontweight='bold')
+    ax1.set_ylim(-1.15, 1.05)
+    ax1.axhline(y=0.0, color='gray', linewidth=0.5, alpha=0.3)
+    ax1.legend(loc='center right', fontsize=10)
     ax1.set_xscale('log')
     ax1.set_xticks(sample_sizes)
     ax1.set_xticklabels(sample_sizes)
@@ -868,12 +1008,15 @@ def create_reflection_figures(results, sample_sizes, model_names, output_dir='re
     flush_print(f"Saved: {output_dir}/reflection_sample_efficiency.png")
     plt.close()
     
-    # Figure 3: Comprehensive Summary (4-panel)
-    fig = plt.figure(figsize=(14, 10))
-    gs = gridspec.GridSpec(2, 2, figure=fig, hspace=0.3, wspace=0.25)
+    # Figure 3: Comprehensive Summary (top: 2 panels, bottom: 3 panels)
+    fig = plt.figure(figsize=(16, 11))
+    gs_top = gridspec.GridSpec(1, 2, figure=fig,
+                               left=0.06, right=0.94, top=0.91, bottom=0.56, wspace=0.28)
+    gs_bot = gridspec.GridSpec(1, 3, figure=fig,
+                               left=0.06, right=0.96, top=0.46, bottom=0.06, wspace=0.35)
     
     # (a) Parameter convergence summary
-    ax1 = fig.add_subplot(gs[0, 0])
+    ax1 = fig.add_subplot(gs_top[0, 0])
     beta_final = [results[n]['DDL']['param_info'].get('beta_mean', 0) for n in sample_sizes]
     gate_final = [results[n]['E∆-MHC-Geo']['param_info'].get('gate_mean', 1) for n in sample_sizes]
     
@@ -897,24 +1040,30 @@ def create_reflection_figures(results, sample_sizes, model_names, output_dir='re
     ax1_twin.set_ylim(-0.05, 0.5)
     ax1.legend([bars1, bars2], ['DDL β', 'E∆ γ'], loc='upper right')
     
-    # (b) Accuracy comparison
-    ax2 = fig.add_subplot(gs[0, 1])
+    # (b) Accuracy comparison — y-axis extended to show JPmHC negatives
+    ax2 = fig.add_subplot(gs_top[0, 1])
     ddl_acc = [results[n]['DDL']['negation_accuracy'] for n in sample_sizes]
+    jpmhc_acc = [results[n]['JPmHC']['negation_accuracy'] for n in sample_sizes]
     edelta_acc = [results[n]['E∆-MHC-Geo']['negation_accuracy'] for n in sample_sizes]
     
-    ax2.bar(x - width/2, ddl_acc, width, label='DDL', color=COLORS['DDL'], edgecolor='black')
-    ax2.bar(x + width/2, edelta_acc, width, label='E∆-MHC-Geo', color=COLORS['E∆-MHC-Geo'], edgecolor='black')
+    width3 = 0.25
+    ax2.bar(x - width3, ddl_acc, width3, label='DDL', color=COLORS['DDL'], edgecolor='black')
+    ax2.bar(x, jpmhc_acc, width3, label='JPmHC', color=COLORS['JPmHC'], edgecolor='black')
+    ax2.bar(x + width3, edelta_acc, width3, label='E∆-MHC-Geo', color=COLORS['E∆-MHC-Geo'], edgecolor='black')
     ax2.axhline(y=0.95, color='red', linestyle='--', linewidth=1.5, alpha=0.7, label='95% target')
+    ax2.axhline(y=0.0, color='gray', linewidth=0.5, alpha=0.3)
     ax2.set_xlabel('Training Samples')
     ax2.set_ylabel('Negation Accuracy')
     ax2.set_title('(b) Final Accuracy Comparison', fontweight='bold')
     ax2.set_xticks(x)
     ax2.set_xticklabels(sample_sizes)
-    ax2.set_ylim(0, 1.05)
-    ax2.legend(loc='lower right')
+    ax2.set_ylim(-1.15, 1.05)
+    ax2.legend(loc='lower right', fontsize=9)
+    ax2.annotate('JPmHC fails (SO(n) only)', xy=(0.35, 0.02), xycoords='axes fraction',
+                fontsize=8, color='#CC79A7', fontweight='bold')
     
     # (c) DDL training trajectory
-    ax3 = fig.add_subplot(gs[1, 0])
+    ax3 = fig.add_subplot(gs_bot[0, 0])
     traj = results[largest_n]['DDL']['trajectory']
     ax3.plot(traj['iter'], traj['beta_mean'], color=COLORS['DDL'], linewidth=2, label='β')
     ax3_twin = ax3.twinx()
@@ -923,27 +1072,45 @@ def create_reflection_figures(results, sample_sizes, model_names, output_dir='re
     ax3.set_xlabel('Training Iteration')
     ax3.set_ylabel('β Value', color=COLORS['DDL'])
     ax3_twin.set_ylabel('Accuracy', color='green')
-    ax3.set_title(f'(c) DDL Training Dynamics ({largest_n} samples)', fontweight='bold')
+    ax3.set_title(f'(c) DDL Dynamics ({largest_n} samples)', fontweight='bold')
     ax3.set_ylim(0, 2.2)
     ax3_twin.set_ylim(-0.1, 1.05)
     
-    # (d) E∆-MHC-Geo training trajectory
-    ax4 = fig.add_subplot(gs[1, 1])
-    traj = results[largest_n]['E∆-MHC-Geo']['trajectory']
-    ax4.plot(traj['iter'], traj['gate_mean'], color=COLORS['E∆-MHC-Geo'], linewidth=2, label='γ')
+    # (d) JPmHC training trajectory (demonstrating SO(n) failure)
+    ax4 = fig.add_subplot(gs_bot[0, 1])
+    traj_jp = results[largest_n]['JPmHC']['trajectory']
+    ax4.plot(traj_jp['iter'], traj_jp['negation_accuracy'],
+            color=COLORS['JPmHC'], linewidth=2, label='Accuracy')
     ax4_twin = ax4.twinx()
-    ax4_twin.plot(traj['iter'], traj['negation_accuracy'], color='green', linewidth=2, linestyle='--', label='Accuracy')
+    ax4_twin.plot(traj_jp['iter'], traj_jp['val_loss'],
+                 color=COLORS['JPmHC'], linewidth=1.5, linestyle='--', alpha=0.5, label='Val Loss')
+    ax4_twin.set_ylabel('Val Loss', color=COLORS['JPmHC'], alpha=0.6, fontsize=9)
     ax4.axhline(y=0.0, color='gray', linestyle=':', linewidth=1)
+    ax4.axhline(y=0.95, color='red', linestyle=':', linewidth=1, alpha=0.5)
     ax4.set_xlabel('Training Iteration')
-    ax4.set_ylabel('Gate γ', color=COLORS['E∆-MHC-Geo'])
-    ax4_twin.set_ylabel('Accuracy', color='green')
-    ax4.set_title(f'(d) E∆-MHC-Geo Training Dynamics ({largest_n} samples)', fontweight='bold')
-    ax4.set_ylim(-0.05, 0.5)
-    ax4_twin.set_ylim(-0.1, 1.05)
+    ax4.set_ylabel('Neg. Accuracy', color=COLORS['JPmHC'])
+    ax4.set_title(f'(d) JPmHC: SO(n) Failure ({largest_n} samples)', fontweight='bold')
+    ax4.set_ylim(-1.15, 1.05)
+    ax4.annotate('Cannot negate (SO(n) only)', xy=(0.5, 0.03), xycoords='axes fraction',
+                ha='center', fontsize=8, color='red', fontweight='bold')
+    
+    # (e) E∆-MHC-Geo training trajectory
+    ax5 = fig.add_subplot(gs_bot[0, 2])
+    traj = results[largest_n]['E∆-MHC-Geo']['trajectory']
+    ax5.plot(traj['iter'], traj['gate_mean'], color=COLORS['E∆-MHC-Geo'], linewidth=2, label='γ')
+    ax5_twin = ax5.twinx()
+    ax5_twin.plot(traj['iter'], traj['negation_accuracy'], color='green', linewidth=2, linestyle='--', label='Accuracy')
+    ax5.axhline(y=0.0, color='gray', linestyle=':', linewidth=1)
+    ax5.set_xlabel('Training Iteration')
+    ax5.set_ylabel('Gate γ', color=COLORS['E∆-MHC-Geo'])
+    ax5_twin.set_ylabel('Accuracy', color='green')
+    ax5.set_title(f'(e) E∆-MHC-Geo Dynamics ({largest_n} samples)', fontweight='bold')
+    ax5.set_ylim(-0.05, 0.5)
+    ax5_twin.set_ylim(-0.1, 1.05)
     
     fig.suptitle('Reflection Experiment: Geometric Operator Analysis\n'
                 '(Following arXiv:2601.00514v1 "Illusion of Insight" methodology)',
-                fontsize=14, fontweight='bold', y=1.02)
+                fontsize=14, fontweight='bold', y=0.98)
     plt.savefig(f'{output_dir}/reflection_comprehensive.png', dpi=300,
                 bbox_inches='tight', facecolor='white')
     flush_print(f"Saved: {output_dir}/reflection_comprehensive.png")
@@ -997,7 +1164,7 @@ def main():
         val_x, val_y = generate_negation_data(500, args.dim, args.device)
         
         results = {}
-        for name, ModelClass in [('DDL', SimpleDDL), ('E∆-MHC-Geo', SimpleHybrid)]:
+        for name, ModelClass in [('DDL', SimpleDDL), ('JPmHC', SimpleJPmHC), ('E∆-MHC-Geo', SimpleHybrid)]:
             model = ModelClass(args.dim).to(args.device)
             results[name] = train_with_trajectory(
                 model=model,
@@ -1011,20 +1178,20 @@ def main():
             )
         
         if args.save_figures:
-            # Generate trajectory-only figures
             create_reflection_figures(
                 {args.n_samples: results}, 
                 [args.n_samples], 
-                ['DDL', 'E∆-MHC-Geo'], 
+                ['DDL', 'JPmHC', 'E∆-MHC-Geo'], 
                 args.output_dir
             )
     else:
-        # Single test mode - only DDL and E∆-MHC-Geo
+        # Single test mode
         train_x, train_y = generate_negation_data(args.n_samples, args.dim, args.device)
         val_x, val_y = generate_negation_data(200, args.dim, args.device)
         
         models = {
             'DDL': SimpleDDL(args.dim).to(args.device),
+            'JPmHC': SimpleJPmHC(args.dim).to(args.device),
             'E∆-MHC-Geo': SimpleHybrid(args.dim).to(args.device),
         }
         

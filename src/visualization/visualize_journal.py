@@ -58,14 +58,15 @@ COLORS = {
     'GPT': '#0072B2',        # Blue
     'DDL': '#D55E00',        # Vermillion/Orange
     'mHC': '#E69F00',        # Orange/Amber (more visible than yellow)
+    'JPmHC': '#CC79A7',      # Reddish Purple
     'E∆-MHC-Geo': '#009E73', # Bluish Green
 }
 
-# Line styles for additional differentiation
 LINE_STYLES = {
     'GPT': '-',
     'DDL': '-',
     'mHC': '-',
+    'JPmHC': '--',
     'E∆-MHC-Geo': '-',
 }
 
@@ -75,12 +76,14 @@ GRADNORM_DIRS = {
         'GPT': 'out-matched/gyroscope-baseline',
         'DDL': 'out-matched/gyroscope-ddl',
         'mHC': 'out-matched/gyroscope-mhc',
+        'JPmHC': 'out-matched/gyroscope-jpmhc',
         'E∆-MHC-Geo': 'out-matched/gyroscope-proposed',
     },
     'stability': {
         'GPT': 'out-matched/stability-baseline',
         'DDL': 'out-matched/stability-ddl',
         'mHC': 'out-matched/stability-mhc',
+        'JPmHC': 'out-matched/stability-jpmhc',
         'E∆-MHC-Geo': 'out-matched/stability-proposed',
     },
 }
@@ -118,7 +121,7 @@ def create_figure_1_training_dynamics():
     dataset_titles = ['Gyroscope\n(Manifold Precision)', 
                      'Stability\n(Unconditional Isometry)']
     
-    model_order = ['GPT', 'DDL', 'mHC', 'E∆-MHC-Geo']
+    model_order = ['GPT', 'DDL', 'mHC', 'JPmHC', 'E∆-MHC-Geo']
     
     for col, (dataset, title) in enumerate(zip(datasets, dataset_titles)):
         logs = {}
@@ -202,10 +205,11 @@ def create_figure_2_stability_analysis():
     from src.models.baseline_gpt import GPT as BaselineGPT, GPTConfig as BaselineConfig
     from src.models.ddl import GPT as DDLGPT, GPTConfig as DDLConfig
     from src.models.mhc import GPT as mHCGPT, GPTConfig as mHCConfig
+    from src.models.jpmhc import GPT as JPmHCGPT, GPTConfig as JPmHCConfig
     from src.models.edelta_hybrid import GPT as EdeltaGPT, GPTConfig as EdeltaConfig
     
     results = {}
-    model_order = ['GPT', 'DDL', 'mHC', 'E∆-MHC-Geo']
+    model_order = ['GPT', 'DDL', 'mHC', 'JPmHC', 'E∆-MHC-Geo']
     
     for model_name, out_dir in GRADNORM_DIRS['stability'].items():
         ckpt_path = os.path.join(out_dir, 'ckpt.pt')
@@ -231,6 +235,7 @@ def create_figure_2_stability_analysis():
             'gpt2': (BaselineGPT, BaselineConfig),
             'ddl': (DDLGPT, DDLConfig),
             'mhc': (mHCGPT, mHCConfig),
+            'jpmhc': (JPmHCGPT, JPmHCConfig),
             'edelta': (EdeltaGPT, EdeltaConfig),
         }
         
@@ -244,7 +249,7 @@ def create_figure_2_stability_analysis():
             'block_size': block_size,
             'vocab_size': 1
         }
-        if model_type in ['mhc', 'edelta']:
+        if model_type in ['mhc', 'jpmhc', 'edelta']:
             config_args['n_streams'] = saved_config.get('n_streams', 4)
         
         config = ConfigClass(**config_args)
@@ -308,12 +313,12 @@ def create_figure_2_stability_analysis():
     models = [m for m in model_order if m in results]
     deviations = [results[m]['norm_deviation'] for m in models]
     colors = [COLORS[m] for m in models]
-    labels = ['GPT', 'DDL', 'mHC', 'Ours']
+    labels = ['Ours' if m == 'E∆-MHC-Geo' else m for m in models]
     
     x_pos = np.arange(len(models))
-    bars = ax2.bar(x_pos, deviations, color=colors, edgecolor='black', linewidth=0.8, width=0.7)
+    bars = ax2.bar(x_pos, deviations, color=colors, edgecolor='black', linewidth=0.8, width=0.6)
     ax2.set_xticks(x_pos)
-    ax2.set_xticklabels(labels, fontweight='bold')
+    ax2.set_xticklabels(labels, fontweight='bold', fontsize=8)
     ax2.set_ylabel('Mean |Norm − 1.0|')
     ax2.set_title('(b) Norm Deviation', fontweight='bold')
     ax2.set_ylim(0, max(deviations) * 1.25)
@@ -338,12 +343,12 @@ def create_figure_2_stability_analysis():
     models = [m for m in model_order if m in final_losses]
     losses = [final_losses[m] for m in models]
     colors = [COLORS[m] for m in models]
-    labels = ['GPT', 'DDL', 'mHC', 'Ours']
+    labels = ['Ours' if m == 'E∆-MHC-Geo' else m for m in models]
     
     x_pos = np.arange(len(models))
-    bars = ax3.bar(x_pos, losses, color=colors, edgecolor='black', linewidth=0.8, width=0.7)
+    bars = ax3.bar(x_pos, losses, color=colors, edgecolor='black', linewidth=0.8, width=0.6)
     ax3.set_xticks(x_pos)
-    ax3.set_xticklabels(labels, fontweight='bold')
+    ax3.set_xticklabels(labels, fontweight='bold', fontsize=8)
     ax3.set_ylabel('Final Validation Loss')
     ax3.set_title('(c) Task Performance', fontweight='bold')
     ax3.set_yscale('log')
@@ -382,8 +387,8 @@ def create_figure_3_ablation():
             if log and 'val_loss' in log:
                 all_results[dataset][model_name] = log['val_loss'][-1]
     
-    model_order = ['GPT', 'DDL', 'mHC', 'E∆-MHC-Geo']
-    model_labels = ['GPT', 'DDL', 'mHC', 'Ours']
+    model_order = ['GPT', 'DDL', 'mHC', 'JPmHC', 'E∆-MHC-Geo']
+    model_labels = ['GPT', 'DDL', 'mHC', 'JPmHC', 'Ours']
     
     for i, (dataset, title) in enumerate(zip(datasets, dataset_titles)):
         ax = axes[i]
@@ -432,7 +437,7 @@ def create_figure_4_comprehensive():
     
     datasets = ['gyroscope', 'stability']
     dataset_short = ['Gyroscope', 'Stability']
-    model_order = ['GPT', 'DDL', 'mHC', 'E∆-MHC-Geo']
+    model_order = ['GPT', 'DDL', 'mHC', 'JPmHC', 'E∆-MHC-Geo']
     
     # Row 1: Loss Curves
     for i, (dataset, short) in enumerate(zip(datasets, dataset_short)):
@@ -488,7 +493,7 @@ def create_figure_4_comprehensive():
     ax_bottom = fig.add_subplot(gs[2, :])
     
     x = np.arange(len(datasets))
-    width = 0.18
+    width = 0.15
     
     for i, model_name in enumerate(model_order):
         losses = []
@@ -503,7 +508,7 @@ def create_figure_4_comprehensive():
             else:
                 losses.append(np.nan)
         
-        offset = (i - 1.5) * width
+        offset = (i - 2) * width
         label = 'Ours' if model_name == 'E∆-MHC-Geo' else model_name
         ax_bottom.bar(x + offset, losses, width, label=label, 
                      color=COLORS[model_name], edgecolor='black', linewidth=0.5)

@@ -23,6 +23,7 @@ import torch.nn as nn
 from src.models.baseline_gpt import GPT as BaselineGPT, GPTConfig as BaselineConfig
 from src.models.ddl import GPT as DDLGPT, GPTConfig as DDLConfig
 from src.models.mhc import GPT as mHCGPT, GPTConfig as mHCConfig
+from src.models.jpmhc import GPT as JPmHCGPT, GPTConfig as JPmHCConfig
 from src.models.edelta_hybrid import GPT as EdeltaGPT, GPTConfig as EdeltaConfig
 
 
@@ -75,6 +76,15 @@ def create_model(model_type: str, n_layer: int, n_head: int, n_embd: int,
         )
         model = mHCGPT(config)
         
+    elif model_type == 'jpmhc':
+        config = JPmHCConfig(
+            n_layer=n_layer, n_head=n_head, n_embd=n_embd,
+            n_streams=n_streams, dropout=0, bias=False,
+            block_size=block_size, vocab_size=1,
+            cayley_alpha=0.1, cayley_iters=2
+        )
+        model = JPmHCGPT(config)
+
     elif model_type == 'edelta':
         config = EdeltaConfig(
             n_layer=n_layer, n_head=n_head, n_embd=n_embd,
@@ -100,7 +110,7 @@ def compare_all_models(n_layer: int = 6, n_head: int = 4, n_embd: int = 128,
     """
     results = {}
     
-    for model_type in ['gpt', 'ddl', 'mhc', 'edelta']:
+    for model_type in ['gpt', 'ddl', 'mhc', 'jpmhc', 'edelta']:
         model = create_model(model_type, n_layer, n_head, n_embd, n_streams, block_size)
         results[model_type] = count_params(model)
     
@@ -194,7 +204,7 @@ Examples:
     
     parser.add_argument('--find_match', action='store_true',
                         help='Find n_layer values for baselines to match E∆-MHC-Geo')
-    parser.add_argument('--breakdown', type=str, choices=['gpt', 'ddl', 'mhc', 'edelta'],
+    parser.add_argument('--breakdown', type=str, choices=['gpt', 'ddl', 'mhc', 'jpmhc', 'edelta'],
                         help='Show component breakdown for specified model')
     parser.add_argument('--quiet', action='store_true',
                         help='Suppress model initialization messages')
@@ -243,7 +253,7 @@ Examples:
         print("-" * 50)
         print(f"{'edelta':<8} {args.n_layer:>8} {target_params:>12,} {target_params/1e6:>10.3f}M {'1.000x':>8}")
         
-        for model_type in ['gpt', 'ddl', 'mhc']:
+        for model_type in ['gpt', 'ddl', 'mhc', 'jpmhc']:
             with suppress_stdout():
                 n_layer, params, ratio = find_matching_nlayer(
                     target_params, model_type, args.n_head, args.n_embd,
@@ -254,7 +264,7 @@ Examples:
         print("\n" + "-" * 50)
         print("Recommended configuration for --match_proposed_params:")
         print("BASELINE_NLAYER_FOR_MATCH = {")
-        for model_type in ['gpt', 'ddl', 'mhc']:
+        for model_type in ['gpt', 'ddl', 'mhc', 'jpmhc']:
             with suppress_stdout():
                 n_layer, params, _ = find_matching_nlayer(
                     target_params, model_type, args.n_head, args.n_embd,
@@ -281,7 +291,7 @@ Examples:
         print("=" * 60)
         
         results = {}
-        for model_type in ['gpt', 'ddl', 'mhc', 'edelta']:
+        for model_type in ['gpt', 'ddl', 'mhc', 'jpmhc', 'edelta']:
             with suppress_stdout():
                 model = create_model(model_type, args.n_layer, args.n_head,
                                     args.n_embd, args.n_streams, args.block_size)
