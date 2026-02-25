@@ -1,53 +1,62 @@
 # E∆-MHC-Geo: Geodesic Manifold-Delta Transformer
 
-A topologically complete transformer architecture operating on the full Orthogonal Group O(n).
+A topologically complete transformer architecture operating on the full Orthogonal Group O(n), featuring input-adaptive, unconditionally orthogonal residual connections via the Data-Dependent Cayley transform.
 
 ## Key Results: Fair Parameter Comparison (~1.79M params each)
 
-### Performance Comparison
+### Main Performance (5 Models)
 
-![Performance Comparison](assets/journal_fig3_ablation.png)
+| Dataset | GPT (9L) | DDL (8L) | mHC (9L) | JPmHC (9L) | **E∆ (6L)** | vs GPT | vs DDL |
+|---------|----------|----------|----------|------------|-------------|--------|--------|
+| **Gyroscope** | 3.80e-3 | 3.29e-3 | 4.06e-3 | 3.46e-3 | **7.08e-4** | 5.4x | **4.6x** |
+| **Stability** | 1.55e-5 | 1.41e-5 | 8.46e-3 | **3.41e-6** | 4.53e-6 | 3.4x | **3.1x** |
+| **Norm Dev.** | 0.474 | 0.506 | 0.543 | 0.004 | **0.001** | 474x | --- |
 
-**E∆-MHC-Geo achieves state-of-the-art with fewer layers:**
+*L = layers. All models have ~1.79M parameters. Best result per row in bold.*
 
-| Benchmark | E∆-MHC-Geo (6L) | Best Baseline | Improvement |
-|-----------|-----------------|---------------|-------------|
-| **Gyroscope** | 5.69e-4 | 3.43e-3 (DDL, 8L) | **6.0× better** |
-| **Stability** | 3.39e-6 | 1.41e-5 (DDL, 8L) | **4.2× better** |
-| **Norm Preservation** | 0.001 | 0.474 (GPT) | **470× better** |
-
-*L = layers. Baselines use 8-9 layers to match E∆-MHC-Geo's 1.79M parameters.*
+E∆-MHC-Geo achieves **state-of-the-art on gyroscope** (manifold precision) with **3 fewer layers** than all baselines, demonstrating that geometric inductive bias outperforms additional depth. JPmHC narrowly leads on stability thanks to its per-token dynamic routing, but E∆ delivers **4.9x better manifold precision** on gyroscope.
 
 ### Training Dynamics
 
-![Training Dynamics](assets/journal_fig1_training.png)
+![Training Dynamics](results/journal_fig1_training.png)
 
-E∆-MHC-Geo (green) shows stable training with lowest final loss. mHC shows instability on long-horizon tasks.
+E∆-MHC-Geo (green) shows stable training with lowest final loss. mHC shows catastrophic instability on long-horizon tasks.
 
 ### Stability Analysis: Norm Preservation
 
-![Stability Analysis](assets/journal_fig2_stability.png)
+![Stability Analysis](results/journal_fig2_stability.png)
 
-E∆-MHC-Geo maintains perfect norm = 1.0 over 100 timesteps, while baselines drift to 0.45-0.55.
+E∆-MHC-Geo maintains perfect norm = 1.0 over 100 timesteps (mean deviation 0.001), while baselines drift to 0.45–0.55. JPmHC (0.004) also preserves norms well via its Cayley retraction.
+
+### Performance Comparison
+
+![Performance Comparison](results/journal_fig3_ablation.png)
 
 ### Parameter Convergence: Theory Validated
 
 ![Reflection Analysis](results/reflection_aha_moment.png)
 
-Following [arXiv:2601.00514v1](https://arxiv.org/abs/2601.00514) "Illusion of Insight" methodology:
-- **DDL**: β converges to **1.99** (target: 2.0) — validates Householder orthogonality theorem
-- **E∆-MHC-Geo**: γ converges to **0.03** (target: 0.0) — learns to select Householder for negation
+Following [arXiv:2601.00514](https://arxiv.org/abs/2601.00514) "Illusion of Insight" methodology:
+- **DDL**: β converges to **1.994** (target: 2.0) — validates Householder orthogonality theorem
+- **E∆-MHC-Geo**: γ converges to **0.044** (target: 0.0) — learns to select Householder for negation
+- **JPmHC**: Achieves negative accuracy on negation — SO(n)-only, cannot produce eigenvalue -1
 
-### New: Near-π Rotation Analysis & Regularization Theory
+### Near-π Rotation Analysis
+
+![Near-π Rotation Comparison](results/near_pi_rotation_comparison.png)
+
+| Dataset | DDL | GPT | mHC | JPmHC | **E∆** |
+|---------|-----|-----|-----|-------|--------|
+| **Single-plane (177.6°)** | 1.16e-5 | 1.20e-5 | 9.83e-3 | 1.70e-6 | **1.16e-6** |
+| **Multi-plane (179.9°)** | 4.85e-6 | 4.93e-6 | 1.55e-2 | **1.32e-6** | 1.51e-6 |
+
+E∆ and JPmHC dramatically outperform GPT and DDL. mHC fails catastrophically (~8,500x worse) because doubly stochastic matrices cannot represent near-180° rotations.
+
+### Regularization Theory
 
 ![Regularization Analysis](results/regularization_analysis.png)
 
-**Key Discovery:** For near-π rotations (θ approaching 180°), the gate converges to γ ≈ 0.5 (blended operator) yet achieves excellent loss (~1e-6). This is **correct behavior**:
-- The blended operator `0.5·Cayley + 0.5·Householder` can approximate near-π transformations
-- Only exact reflection (y=-x) requires gate polarization to γ → 0
-- **Theorem 12:** All smooth symmetric regularizations have zero gradient at γ=0.5 (mathematical necessity)
-
-See `docs/RESEARCH.md` Sections 6.6-6.7 for complete analysis.
+All smooth symmetric regularizations have zero gradient at γ = 0.5 (Theorem: Universal Zero-Gradient). The midpoint collapse regularizer 4γ(1-γ) is optimal among alternatives.
 
 ---
 
@@ -55,51 +64,52 @@ See `docs/RESEARCH.md` Sections 6.6-6.7 for complete analysis.
 
 This repository implements the **E∆-MHC-Geo** (E-Delta-MHC-Geo) architecture, a novel transformer design that achieves:
 
-- **Unconditional Orthogonality**: Cayley rotations guarantee `Q(x)ᵀQ(x) = I` for any input
-- **Topological Completeness**: Full O(n) coverage via Householder reflections (det=-1)
-- **Thermodynamic Gating**: Entropy-aware switching between rotation and reflection
+- **Unconditional Orthogonality**: Data-Dependent Cayley rotations guarantee Q(x)ᵀQ(x) = I for any input, any β
+- **Topological Completeness**: Full O(n) coverage via Householder reflections (det = -1) combined with Cayley rotations (det = +1)
+- **Automatic Operator Selection**: Learned gate γ selects between rotation and reflection based on task structure
+- **Midpoint Collapse Regularization**: Forces binary gate decisions via 4γ(1-γ) penalty
 
 ## Project Structure
 
 ```
 edelta/
-├── src/                        # Main source code
-│   ├── models/                 # Model implementations
-│   │   ├── baseline_gpt.py     # Standard GPT baseline
-│   │   ├── ddl.py              # Deep Delta Learning (arXiv:2601.00417)
-│   │   ├── mhc.py              # DeepSeek mHC (arXiv:2512.24880)
-│   │   └── edelta_hybrid.py    # E∆-MHC-Geo (proposed model)
-│   ├── training/               # Training scripts
-│   │   ├── train_continuous.py # Continuous benchmarks (gyroscope, stability, near-π)
-│   │   ├── train_reflection.py # Direct reflection test (y = -x)
+├── src/                           # Main source code
+│   ├── models/                    # Model implementations
+│   │   ├── baseline_gpt.py        # Standard GPT baseline
+│   │   ├── ddl.py                 # Deep Delta Learning (arXiv:2406.17550)
+│   │   ├── mhc.py                 # DeepSeek mHC (arXiv:2512.24880)
+│   │   ├── jpmhc.py               # JPmHC — Cayley retraction (arXiv:2602.18308)
+│   │   └── edelta_hybrid.py       # E∆-MHC-Geo (proposed model)
+│   ├── training/                  # Training scripts
+│   │   ├── train_continuous.py    # Continuous benchmarks (gyroscope, stability, near-π)
+│   │   ├── train_reflection.py    # Reflection/negation experiment (y = -x)
 │   │   └── train_language_model.py
-│   ├── data/                   # Data preparation modules
-│   │   ├── gyroscope.py        # Manifold precision test
-│   │   ├── stability.py        # Isometry test
-│   │   ├── reflection.py       # Pure negation task
-│   │   └── near_pi_rotation.py # Near-π rotation datasets (NEW)
-│   ├── utils/                  # Utility scripts
-│   │   ├── param_counter.py    # Model parameter analysis
-│   │   ├── sample.py           # Language model sampling
-│   │   └── bench.py            # Benchmarking utilities
-│   └── visualization/          # Publication figure generation
-│       └── visualize_journal.py
-├── scripts/                    # Experiment runner scripts
-│   ├── prepare_data.sh         # Generate datasets (gyroscope, stability)
-│   ├── run_matched_params.sh   # Run continuous benchmarks (fair comparison)
-│   └── run_reflection.sh       # Run reflection experiments
-├── data/                       # Generated datasets
-│   ├── gyroscope/
-│   └── stability/
-├── results/                    # Generated figures
-│   ├── journal_fig1_training.png
-│   ├── journal_fig2_stability.png
-│   ├── journal_fig3_ablation.png
-│   ├── reflection_aha_moment.png       # "Aha!" moment visualization
-│   └── regularization_analysis.png     # Regularization theory visualization (NEW)
-├── docs/                       # Documentation
-│   └── RESEARCH.md             # Full theoretical foundation (2000+ lines)
-└── archive/                    # Old/experimental code
+│   ├── data/                      # Data generation modules
+│   │   ├── gyroscope.py           # Manifold precision dataset
+│   │   ├── stability.py           # Long-horizon isometry dataset
+│   │   ├── reflection.py          # Pure negation task
+│   │   └── near_pi_rotation.py    # Near-π rotation datasets
+│   ├── utils/                     # Utilities
+│   │   ├── param_counter.py       # Model parameter analysis & matching
+│   │   ├── sample.py              # Language model sampling
+│   │   └── bench.py               # Benchmarking utilities
+│   └── visualization/             # Figure generation
+│       ├── visualize_journal.py   # Main publication figures (Fig 1-3)
+│       └── visualize_near_pi.py   # Near-π rotation figures
+├── scripts/                       # Experiment runner scripts
+│   ├── prepare_data.sh            # Generate datasets
+│   ├── run_matched_params.sh      # Run all 5 models (fair comparison)
+│   └── run_reflection.sh          # Run reflection experiments
+├── paper/                         # LaTeX paper source
+│   ├── main.tex                   # Paper source (TMLR format)
+│   ├── main.pdf                   # Compiled PDF
+│   └── references.bib             # Bibliography
+├── docs/                          # Documentation
+│   ├── RESEARCH.md                # Full research documentation (2000+ lines)
+│   └── JPMHC_COMPARISON.md        # Detailed JPmHC comparison
+├── data/                          # Generated datasets
+├── results/                       # Generated figures and results
+└── archive/                       # Old/experimental code
 ```
 
 ## Installation
@@ -109,127 +119,177 @@ edelta/
 curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
 
-# Install Python and sync dependencies
+# Clone and install
+git clone https://github.com/arash-shahmansoori/edelta.git
+cd edelta
 uv python install
 uv sync
 ```
 
-## Quick Start
+## Reproducing All Results
+
+The fastest way to reproduce everything:
+
+```bash
+# 1. Prepare datasets
+bash scripts/prepare_data.sh
+
+# 2. Run all continuous benchmarks (gyroscope + stability, all 5 models)
+bash scripts/run_matched_params.sh
+
+# 3. Run reflection experiments
+bash scripts/run_reflection.sh
+
+# 4. Generate publication figures
+uv run src/visualization/visualize_journal.py
+uv run src/visualization/visualize_near_pi.py
+```
+
+## Step-by-Step Guide
 
 ### 1. Prepare Datasets
 
 ```bash
-# Prepare all datasets (gyroscope, stability) using the script
+# Prepare all datasets (gyroscope + stability)
 bash scripts/prepare_data.sh
 
-# Or prepare specific datasets
-bash scripts/prepare_data.sh gyroscope
-bash scripts/prepare_data.sh stability
+# Or prepare individually
+bash scripts/prepare_data.sh gyroscope     # d=16, seq_len=256, 9000 train
+bash scripts/prepare_data.sh stability     # d=64, seq_len=128, 900 train
 
-# Or run data modules directly
-uv run src/data/gyroscope.py
-uv run src/data/stability.py
+# Or run data modules directly with custom parameters
+uv run src/data/gyroscope.py --dim 16 --seq_len 256 --n_train 9000
+uv run src/data/stability.py --dim 64 --n_train 900 --train_seq_len 128
 ```
 
-### 2. Run Continuous Benchmark Experiments
+### 2. Run Continuous Benchmarks (Gyroscope + Stability)
 
-**Recommended: Use the experiment script (fair parameter comparison)**
+All 5 models are trained with matched parameters (~1.79M each).
 
 ```bash
-# Run all models on both datasets with matched parameters (~1.8M each)
+# Run all models on both datasets (recommended)
 bash scripts/run_matched_params.sh
 
-# Models are configured with adjusted n_layer to match parameter counts:
-# - E∆-MHC-Geo: n_layer=6, ~1.80M params (reference)
-# - GPT:        n_layer=9, ~1.80M params
-# - DDL:        n_layer=8, ~1.80M params
-# - mHC:        n_layer=9, ~1.79M params
+# Parameter counts (n_embd=128 for all):
+#   E∆-MHC-Geo: n_layer=6  → 1.788M (reference)
+#   GPT:        n_layer=9  → 1.780M (0.996x)
+#   DDL:        n_layer=8  → 1.784M (0.998x)
+#   mHC:        n_layer=9  → 1.838M (1.028x)
+#   JPmHC:      n_layer=9  → 1.896M (1.061x)
 ```
 
 **Or run individual models manually:**
 
 ```bash
-# Train E∆-MHC-Geo on gyroscope task
-uv run src/training/train_continuous.py --model_type edelta --dataset gyroscope --out_dir out-edelta
+# Train E∆-MHC-Geo (proposed, n_layer=6)
+uv run src/training/train_continuous.py \
+    --model_type edelta --dataset gyroscope --out_dir out-matched/gyroscope-proposed
 
-# Train baselines with matched parameters
-uv run src/training/train_continuous.py --model_type gpt2 --dataset gyroscope --out_dir out-gpt --match_proposed_params
-uv run src/training/train_continuous.py --model_type ddl --dataset gyroscope --out_dir out-ddl --match_proposed_params
-uv run src/training/train_continuous.py --model_type mhc --dataset gyroscope --out_dir out-mhc --match_proposed_params
+# Train baselines with matched parameters (auto-scales n_layer)
+uv run src/training/train_continuous.py \
+    --model_type gpt2 --dataset gyroscope --out_dir out-matched/gyroscope-baseline \
+    --match_proposed_params
+
+uv run src/training/train_continuous.py \
+    --model_type ddl --dataset gyroscope --out_dir out-matched/gyroscope-ddl \
+    --match_proposed_params
+
+uv run src/training/train_continuous.py \
+    --model_type mhc --dataset gyroscope --out_dir out-matched/gyroscope-mhc \
+    --match_proposed_params
+
+uv run src/training/train_continuous.py \
+    --model_type jpmhc --dataset gyroscope --out_dir out-matched/gyroscope-jpmhc \
+    --match_proposed_params
 ```
+
+Replace `gyroscope` with `stability` for the stability benchmark.
 
 ### 3. Run Reflection Experiments
 
-**Recommended: Use the experiment script**
+Tests geometric operator behavior on pure negation (y = -x). Only DDL and E∆-MHC-Geo are tested — GPT and mHC use MLP approximation rather than geometric operators.
 
 ```bash
-# Full sample efficiency test (default)
+# Full sample efficiency test (default: 10, 25, 50, 100, 200, 500 samples)
 bash scripts/run_reflection.sh
 
-# Parameter trajectory analysis
+# Parameter trajectory analysis (500 samples, detailed tracking)
 bash scripts/run_reflection.sh trajectory
 
-# Quick sanity check
+# Quick single-run sanity check
 bash scripts/run_reflection.sh single
 ```
 
 **Or run manually:**
 
 ```bash
-# Run sample efficiency test with trajectory analysis (main experiment)
-uv run src/training/train_reflection.py --mode sample_efficiency --save_figures --max_iters 2000
+# Sample efficiency test with figure generation
+uv run src/training/train_reflection.py \
+    --mode sample_efficiency --dim 64 --max_iters 2000 \
+    --save_figures --output_dir results
 
-# Run detailed trajectory analysis
-uv run src/training/train_reflection.py --mode trajectory --n_samples 500 --save_figures
+# Detailed trajectory analysis
+uv run src/training/train_reflection.py \
+    --mode trajectory --n_samples 500 --dim 64 --max_iters 2000 \
+    --save_figures --output_dir results
 
-# Single test with specific parameters
-uv run src/training/train_reflection.py --mode single --n_samples 100 --max_iters 2000
+# Single quick test
+uv run src/training/train_reflection.py \
+    --mode single --n_samples 100 --dim 64 --max_iters 1000
 ```
 
-The reflection test directly measures geometric operator capabilities by learning pure negation (y = -x).
-Following the methodology in ["The Illusion of Insight in Reasoning Models" (arXiv:2601.00514v1)](https://arxiv.org/abs/2601.00514),
-we track parameter trajectories to identify "Aha!" moments.
+**Reflection Results:**
 
-**Key insight**: We test only DDL and E∆-MHC-Geo (not GPT or mHC) because:
-- GPT and mHC use MLP approximation, which can learn any function
-- DDL and E∆-MHC-Geo have learnable geometric parameters (β, γ) that should converge to specific values
+| Samples | DDL β | DDL Acc | Conv? | E∆ γ | E∆ Acc | Conv? |
+|---------|-------|---------|-------|------|--------|-------|
+| 10 | 1.40 | -0.98 | ✗ | 0.235 | -1.00 | ✗ |
+| 25 | 1.58 | -0.85 | ✗ | 0.255 | -0.98 | ✗ |
+| 50 | 1.88 | -0.80 | ✗ | 0.171 | -0.38 | ✗ |
+| 100 | **1.95** | -0.16 | ✓ | 0.192 | -0.92 | ✗ |
+| 200 | **1.98** | 0.61 | ✓ | 0.281 | -0.35 | ✗ |
+| 500 | **1.99** | **0.96** | ✓ | **0.044** | **0.96** | ✓ |
 
-**Expected results**:
-- DDL: β should converge to 2.0 (exact Householder reflection)
-- E∆-MHC-Geo: γ should converge to 0.0 (select Householder component over Cayley)
+DDL's β → 1.994 (within 0.3% of target 2.0); E∆'s γ → 0.044 (within 4.4% of target 0.0). Both achieve 96% accuracy at 500 samples. "Aha!" moments observed: parameter convergence precedes accuracy gains.
 
-### 4. Run Near-π Rotation Experiments (NEW)
+### 4. Run Near-π Rotation Experiments
 
-Near-π rotation experiments test the boundary between rotation and reflection to understand gate behavior.
+Tests the boundary between rotation and reflection with eigenvalues approaching -1.
 
 ```bash
 # Generate near-π rotation datasets
-uv run src/data/near_pi_rotation.py --rotation_mode single_plane --theta 3.1 --seq_len 128
-uv run src/data/near_pi_rotation.py --rotation_mode multi_plane --theta 3.14 --seq_len 128 --output_dir data/near_pi_rotation_multiplane
+uv run src/data/near_pi_rotation.py \
+    --rotation_mode single_plane --theta 3.1 --seq_len 128
 
-# Train E∆-MHC-Geo on single-plane near-π (expect γ ≈ 0.5, good convergence)
-uv run src/training/train_continuous.py \
-    --model_type edelta \
-    --dataset near_pi_rotation \
-    --out_dir out-near-pi-single \
-    --init_gate_bias 0.0 \
-    --gate_reg_weight 0.5
+uv run src/data/near_pi_rotation.py \
+    --rotation_mode multi_plane --theta 3.14 --seq_len 128 \
+    --output_dir data/near_pi_rotation_multiplane
 
-# Train E∆-MHC-Geo on multi-plane near-π (expect γ ≈ 0.5, good convergence)
-uv run src/training/train_continuous.py \
-    --model_type edelta \
-    --dataset near_pi_rotation_multiplane \
-    --out_dir out-near-pi-multi \
-    --init_gate_bias 0.0 \
-    --gate_reg_weight 0.5
+# Train all 5 models on single-plane near-π
+for model in gpt2 ddl mhc jpmhc edelta; do
+    uv run src/training/train_continuous.py \
+        --model_type $model \
+        --dataset near_pi_rotation \
+        --out_dir out-matched/near-pi-single-$model \
+        --match_proposed_params
+done
+
+# Train all 5 models on multi-plane near-π
+for model in gpt2 ddl mhc jpmhc edelta; do
+    uv run src/training/train_continuous.py \
+        --model_type $model \
+        --dataset near_pi_rotation_multiplane \
+        --out_dir out-matched/near-pi-multi-$model \
+        --match_proposed_params
+done
+
+# Generate near-π comparison figure
+uv run src/visualization/visualize_near_pi.py
 ```
-
-**Key Finding:** For near-π rotations, the gate converges to γ ≈ 0.5 (blended) rather than polarizing, yet achieves excellent loss (~1e-6). This is **correct behavior**—the blended operator is a valid solution for near-π transformations where eigenvalues approach but don't equal -1. See `docs/RESEARCH.md` Section 6.7 for full analysis.
 
 ### 5. Verify Parameter Counts
 
 ```bash
-# Compare parameter counts across all models
+# Compare parameter counts across all 5 models
 uv run src/utils/param_counter.py
 
 # Find matching n_layer for baselines to match E∆-MHC-Geo
@@ -239,200 +299,103 @@ uv run src/utils/param_counter.py --find_match
 uv run src/utils/param_counter.py --breakdown
 ```
 
-### 6. Generate Figures
+### 6. Generate All Figures
 
 ```bash
-# Generate publication-quality figures (saves to results/)
+# Publication figures (training dynamics, stability, ablation)
 uv run src/visualization/visualize_journal.py
+
+# Near-π rotation comparison figure
+uv run src/visualization/visualize_near_pi.py
 ```
 
-### 7. Sample from Language Model
+All figures are saved to `results/`.
 
-```bash
-# Sample from a trained language model checkpoint
-uv run src/utils/sample.py --out_dir=out-shakespeare-char
-```
-
-## Key Results
-
-See `assets/` and `results/` for publication figures:
-
-### Continuous Benchmark Figures
+## Generated Figures
 
 | Figure | Description |
 |--------|-------------|
-| `journal_fig1_training.png` | Training dynamics: loss and gradient norm evolution across 4 models |
-| `journal_fig2_stability.png` | Stability analysis: norm preservation (E∆-MHC-Geo: 0.001 vs 0.47-0.54) |
-| `journal_fig3_ablation.png` | Final performance comparison showing 6.0× and 4.2× improvements |
-
-### Reflection Experiment Figure (arXiv:2601.00514v1 methodology)
-
-| Figure | Description |
-|--------|-------------|
-| `reflection_aha_moment.png` | **"Aha!" Moment Visualization**: (a) DDL β: 1.0→2.0, (b) E∆ γ: 0.18→0.01 with uncertainty bands, (c-d) Scatter plots showing "Aha!" moments as parameters converge. **Note:** Uses symmetry-breaking init (see Section 6.5) |
-
-### Regularization Analysis Figure (NEW)
-
-| Figure | Description |
-|--------|-------------|
-| `regularization_analysis.png` | **Mathematical proof** that all smooth symmetric regularizations have zero gradient at γ=0.5. Shows why current `4γ(1-γ)` is optimal among alternatives. See `docs/RESEARCH.md` Section 6.6 |
-
-### Near-π Rotation Comparison Figure (NEW)
-
-| Figure | Description |
-|--------|-------------|
-| `near_pi_rotation_comparison.png` | **Comprehensive baseline comparison** on near-π rotation tasks: (a-b) Training curves showing E∆-MHC-Geo convergence, (c) Final performance bar chart, (d-e) Gate evolution (γ → 0.5-0.75 blend), (f) Improvement factors (4.6-5.7× vs DDL). See `docs/RESEARCH.md` Section 6.7 |
-
-### Continuous Benchmark Results (Fair Comparison: ~1.79M params each)
-
-| Dataset | GPT (9L) | DDL (8L) | mHC (9L) | **E∆-MHC-Geo (6L)** | Improvement |
-|---------|----------|----------|----------|---------------------|-------------|
-| **Gyroscope** | 3.80e-3 | 3.43e-3 | 4.32e-3 | **5.69e-4** | 6.0× vs DDL |
-| **Stability** | 1.55e-5 | 1.41e-5 | 8.52e-3 | **3.39e-6** | 4.2× vs DDL |
-| **Norm Dev.** | 0.474 | 0.506 | 0.543 | **0.001** | 470× vs GPT |
-
-*L = layers. All models have ~1.79M parameters for fair comparison.*
-
-**Key Finding:** E∆-MHC-Geo achieves best results with **3 fewer layers** than baselines, demonstrating that geometric inductive bias outperforms additional depth.
-
-### Reflection Experiment Results
-
-| Samples | DDL β | DDL Acc | Converged? | E∆-MHC-Geo γ | E∆ Acc | Converged? |
-|---------|-------|---------|------------|--------------|--------|------------|
-| 10 | 1.41 | -0.97 | ✗ | 0.189 | -0.97 | ✗ |
-| 25 | 1.59 | -0.93 | ✗ | 0.183 | -0.96 | ✗ |
-| 50 | 1.88 | -0.85 | ✗ | 0.129 | -0.96 | ✗ |
-| 100 | **1.95** | -0.23 | ✓ | 0.129 | -0.93 | ✗ |
-| 200 | **1.98** | 0.63 | ✓ | **0.050** | 0.66 | ✓ |
-| 500 | **1.99** | **0.96** | ✓ | **0.029** | **0.96** | ✓ |
-
-**Key findings** (following arXiv:2601.00514v1 "Illusion of Insight" methodology):
-- **DDL**: β converges to 1.99 (within 0.3% of target 2.0) — validates Theorem 7
-- **E∆-MHC-Geo**: γ converges to 0.03 (within 2.9% of target 0.0) — automatic operator selection
-- Both achieve **96% accuracy** with 500 samples, validating geometric inductive bias
-- "Aha!" moments observed: parameter convergence precedes accuracy gains
-
-**Important Finding — Symmetry Breaking:**
-- The midpoint collapse regularization `L = 4γ(1-γ)` has **zero gradient at γ=0.5**
-- Continuous benchmarks (gyroscope, stability) work with unbiased init because input features naturally break symmetry
-- Pure reflection task requires explicit symmetry-breaking initialization (γ ≈ 0.18)
-- See `docs/RESEARCH.md` Section 6.5 for detailed analysis
-
-### Near-π Rotation Experiments (NEW)
-
-![Near-π Rotation Comparison](results/near_pi_rotation_comparison.png)
-
-**Figure: Comprehensive near-π rotation analysis (3×3 grid):**
-- **(a-b)** Baseline comparison: E∆-MHC-Geo (green) achieves 5-10× lower validation loss than GPT, DDL, and mHC
-- **Summary panel:** Baseline losses (DDL, GPT, mHC) and E∆-MHC-Geo initialization robustness ranges
-- **(c-e)** Single-plane (2/64 eigenvalues near -1): Per-layer gate evolution for γ₀=0.82, 0.50, 0.18
-- **(f-h)** Multi-plane (64/64 eigenvalues near -1): Per-layer gate evolution showing adaptive specialization
-
-Each gate evolution panel displays **6 layers (L0-L5)** with distinct colors/markers and the **exact validation loss** achieved.
-
-#### Baseline Comparison (~1.8M parameters each)
-
-| Dataset | DDL | GPT | mHC | E∆-MHC-Geo (all inits) |
-|---------|-----|-----|-----|------------------------|
-| **Single-plane (θ=177.6°)** | 1.16e-05 | 1.20e-05 | 9.83e-03 | **2.1-2.9e-06** |
-| **Multi-plane (θ=179.9°)** | 4.85e-06 | 4.93e-06 | 1.55e-02 | **1.0-1.6e-06** |
-
-E∆-MHC-Geo achieves **5-10× improvement** over the best baseline (DDL) across all initializations.
-
-#### Initialization Robustness: Per-Layer Gate Adaptation (panels c-h)
-
-| Task | Init | γ₀ | Final γ (mean±std) | **Validation Loss** |
-|------|------|-----|-------------------|---------------------|
-| **Single-plane** | Cayley | 0.82 | 1.000 ± 0.000 | **2.10e-06** |
-| | Neutral | 0.50 | 0.667 ± 0.471 | **2.20e-06** |
-| | Householder | 0.18 | 0.000 ± 0.000 | **2.94e-06** |
-| **Multi-plane** | Cayley | 0.82 | 1.000 ± 0.000 | **1.27e-06** |
-| | Neutral | 0.50 | 0.750 ± 0.433 | **1.62e-06** |
-| | Householder | 0.18 | 0.083 ± 0.276 | **9.80e-07** ✓ best |
-
-**Breakthrough Finding:** All six initializations achieve **10⁻⁶ to 10⁻⁷** loss despite radically different gate configurations:
-1. **Multiple equivalent optima** — pure Cayley (γ=1), pure Householder (γ=0), and blends all work
-2. **Per-layer adaptation** — 6 layers independently specialize (visible in panels c-h)
-3. **No hyperparameter tuning required** — default settings achieve optimal performance
-
-#### Key Findings
-
-1. **E∆-MHC-Geo dominates baselines** — 5-10× better loss on near-π rotations
-2. **mHC fails catastrophically** — doubly stochastic matrices cannot represent near-180° rotations
-3. **Per-layer specialization emerges** — each layer adapts independently (L0-L5 in panels c-h)
-4. **Initialization robustness** — all γ₀ values achieve ~10⁻⁶ loss
-5. See `docs/RESEARCH.md` Section 6.6-6.8 for theoretical analysis
+| `journal_fig1_training.png` | Training dynamics: loss and gradient norm across 5 models |
+| `journal_fig2_stability.png` | Norm preservation: E∆ (0.001) vs JPmHC (0.004) vs baselines (0.47–0.54) |
+| `journal_fig3_ablation.png` | Final performance comparison bar chart |
+| `reflection_aha_moment.png` | "Aha!" moment: DDL β → 2.0, E∆ γ → 0.0 with uncertainty bands |
+| `reflection_comprehensive.png` | 2x3 grid: DDL/E∆/JPmHC dynamics, accuracy, and orth. error |
+| `reflection_trajectories.png` | Detailed parameter trajectories during training |
+| `reflection_sample_efficiency.png` | Accuracy vs sample size for DDL, E∆, JPmHC |
+| `near_pi_rotation_comparison.png` | Training curves, bar charts, and summary for near-π tasks |
+| `regularization_analysis.png` | Mathematical proof: zero gradient at γ = 0.5 |
 
 ## Model Comparison
 
-| Model | Architecture | Key Property |
-|-------|--------------|--------------|
-| **GPT** | `x + MLP(x)` | Standard residual |
-| **DDL** | `x - β(k·x)k` | Rank-1 linear update |
-| **mHC** | Sinkhorn doubly stochastic | Approximate orthogonality |
-| **E∆-MHC-Geo** | `γ·Cayley + (1-γ)·Householder` | Exact O(n) coverage |
+| Model | Architecture | Orthogonality | Negation (λ=-1) | Input-Adaptive |
+|-------|-------------|---------------|-----------------|----------------|
+| **GPT** | x + MLP(x) | None | N/A | No |
+| **DDL** | I - β·k·kᵀ | Only at β ∈ {0,2} | At β = 2 | Yes |
+| **mHC** | Sinkhorn doubly stochastic | Approximate (20+ iters) | No | No |
+| **JPmHC** | Iterative Cayley retraction | Approximate (s=2) | No (SO(n) only) | Yes (per-token) |
+| **E∆-MHC-Geo** | γ·Cayley + (1-γ)·Householder | **Exact** (algebraic) | **Yes** (via gate) | **Yes** (per-input) |
 
 ## Theoretical Foundation
 
 The E∆-MHC-Geo architecture is built on:
 
-1. **Data-Dependent Cayley Transform** (Definition 2.3):
-   - `Q(x) = (I + (β/2)A(x))⁻¹(I - (β/2)A(x))`
-   - Unconditionally orthogonal for ANY β
+1. **Data-Dependent Cayley Transform** — Q(x) = (I + (β/2)A(x))⁻¹(I - (β/2)A(x)) is unconditionally orthogonal for any β, any input. The rotation plane is computed from the input via neural networks.
 
-2. **Householder Reflection** (Theorem 7):
-   - `H₂(k) = I - 2·k·kᵀ`
-   - β=2 is FIXED (only value achieving both orthogonality AND negation)
+2. **Eigenvalue Exclusion Theorem** — The Cayley transform provably cannot produce eigenvalue λ = -1, motivating the Hybrid design.
 
-3. **DDC-Hybrid Operator** (Definition 5.2):
-   - `G_γ(X) = γ·Q(X)·X + (1-γ)·H₂(k(X))·X`
-   - Full O(n) coverage via thermodynamic gating
+3. **E∆ Hybrid Operator** — G_γ(X) = γ·Q(X)·X + (1-γ)·H₂(k(X))·X combines Cayley rotation (det = +1) with Householder reflection (det = -1, β = 2 fixed) for full O(n) coverage.
 
-See `docs/RESEARCH.md` for the complete mathematical foundation.
+4. **Midpoint Collapse Regularization** — L_gate = 4γ(1-γ) forces binary gate decisions. Universal zero-gradient theorem explains when this succeeds and what escape mechanisms are available.
 
-## Training Options
+5. **Unconditional Norm Preservation** — ||Q(x)·y||₂ = ||y||₂ for all inputs, validated empirically (0.001 mean deviation).
+
+See `docs/RESEARCH.md` for the complete mathematical framework and `paper/main.tex` for the publication-ready paper.
+
+## Training Options Reference
 
 ```bash
-# Full list of training options
 uv run src/training/train_continuous.py --help
-
-# Common options:
-#   --model_type          gpt2, ddl, mhc, edelta
-#   --dataset             gyroscope, stability
-#   --out_dir             Output directory for checkpoints
-#   --max_iters           Number of training iterations (default: 2000)
-#   --batch_size          Batch size (default: 64)
-#   --n_layer             Number of transformer layers (default: 6)
-#   --n_embd              Embedding dimension (default: 128)
-#   --learning_rate       Learning rate (default: 1e-3)
-#   --device              cuda or cpu (default: cuda)
-#   --match_proposed_params  Adjust baseline n_layer to match E∆-MHC-Geo params (~1.8M)
 ```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--model_type` | `gpt2` | Model: `gpt2`, `ddl`, `mhc`, `jpmhc`, `edelta` |
+| `--dataset` | `gyroscope` | Dataset: `gyroscope`, `stability`, `near_pi_rotation`, `near_pi_rotation_multiplane` |
+| `--out_dir` | `out-continuous` | Output directory for checkpoints and results |
+| `--max_iters` | `2000` | Training iterations |
+| `--batch_size` | `64` | Batch size |
+| `--n_layer` | `6` | Transformer layers |
+| `--n_embd` | `128` | Embedding dimension |
+| `--n_head` | `4` | Attention heads |
+| `--n_streams` | `4` | Number of streams (mHC/JPmHC/E∆) |
+| `--learning_rate` | `1e-3` | Learning rate (cosine decay to `--min_lr`) |
+| `--min_lr` | `1e-4` | Minimum learning rate |
+| `--weight_decay` | `0.1` | AdamW weight decay |
+| `--grad_clip` | `1.0` | Gradient clipping |
+| `--gate_reg_weight` | `0.1` | Midpoint collapse regularization weight (E∆ only) |
+| `--init_gate_bias` | `0.0` | Initial gate bias (E∆ only; >0 = prefer Cayley, <0 = prefer Householder) |
+| `--match_proposed_params` | `false` | Auto-scale baseline n_layer to match E∆ params |
+| `--device` | `cuda` | Device: `cuda` or `cpu` |
+| `--seed` | `42` | Random seed |
 
 ## Scripts Reference
 
 | Script | Description |
 |--------|-------------|
-| `scripts/prepare_data.sh` | Generate datasets (gyroscope, stability) |
-| `scripts/run_matched_params.sh` | Run all models with fair parameter comparison |
-| `scripts/run_reflection.sh` | Run reflection experiments (DDL, E∆-MHC-Geo) |
-
-## Utilities Reference
-
-| Utility | Description |
-|---------|-------------|
-| `src/utils/param_counter.py` | Analyze and compare model parameter counts |
-| `src/utils/sample.py` | Sample from trained language models |
-| `src/utils/bench.py` | Benchmarking utilities |
+| `scripts/prepare_data.sh` | Generate gyroscope and stability datasets |
+| `scripts/run_matched_params.sh` | Run all 5 models with fair parameter comparison (~1.79M) |
+| `scripts/run_reflection.sh` | Run reflection experiments (DDL + E∆-MHC-Geo) |
 
 ## References
 
-- **DDL**: arXiv:2601.00417 - Deep Delta Learning
-- **DeepSeek mHC**: arXiv:2512.24880 - Multi-Head Complementary Attention
-- **"Illusion of Insight"**: [arXiv:2601.00514v1](https://arxiv.org/abs/2601.00514) - d'Aliberti & Ribeiro (2025). Methodology for analyzing "Aha!" moments in reasoning models via parameter trajectory analysis.
-- **Cayley Transform**: Cayley, A. (1846) - Orthogonal parameterization
-- **Householder Reflection**: Householder, A.S. (1958) - Exact negation operator
+- **E∆-MHC-Geo**: This work — Geodesic Manifold-Delta Transformer
+- **DDL**: [arXiv:2406.17550](https://arxiv.org/abs/2406.17550) — Deep Delta Learning
+- **DeepSeek mHC**: [arXiv:2512.24880](https://arxiv.org/abs/2512.24880) — Hyper-Connections
+- **JPmHC**: [arXiv:2602.18308](https://arxiv.org/abs/2602.18308) — Sengupta, Wang & Brunswic (2026). Hyper-Connections with Cayley Retraction for Scalable Transformers
+- **"Illusion of Insight"**: [arXiv:2601.00514](https://arxiv.org/abs/2601.00514) — Methodology for analyzing "Aha!" moments via parameter trajectory analysis
+- **Cayley Transform**: Cayley, A. (1846) — Orthogonal parameterization via skew-symmetric matrices
+- **Householder Reflection**: Householder, A.S. (1958) — Exact negation operator
 
 ## License
 
-MIT License - see LICENSE file.
+MIT License — see LICENSE file.
