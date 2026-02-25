@@ -399,3 +399,5 @@ uv run src/training/train_continuous.py --help
 ## License
 
 MIT License — see LICENSE file.
+
+---
