@@ -101,50 +101,95 @@ def create_model(model_type: str, n_layer: int, n_head: int, n_embd: int,
 
 
 def compare_all_models(n_layer: int = 6, n_head: int = 4, n_embd: int = 128,
-                       n_streams: int = 4, block_size: int = 64) -> dict:
+                       n_streams: int = 4, block_size: int = 64,
+                       matched: bool = False) -> dict:
     """
     Compare parameter counts across all model architectures.
+    
+    When matched=True, uses per-model configs to match E∆-MHC-Geo's param count.
+    JPmHC requires n_embd=512 (paper-faithful: F operates at d_stream width).
     
     Returns:
         dict: {model_name: param_count}
     """
-    results = {}
+    MATCH_CONFIG = {
+        'gpt':    {'n_layer': 9},
+        'ddl':    {'n_layer': 8},
+        'mhc':    {'n_layer': 9},
+        'jpmhc':  {'n_layer': 7, 'n_embd': 512},
+        'edelta': {'n_layer': 6},
+    }
     
+    results = {}
     for model_type in ['gpt', 'ddl', 'mhc', 'jpmhc', 'edelta']:
-        model = create_model(model_type, n_layer, n_head, n_embd, n_streams, block_size)
+        if matched:
+            cfg = MATCH_CONFIG.get(model_type, {})
+            ml = cfg.get('n_layer', n_layer)
+            me = cfg.get('n_embd', n_embd)
+        else:
+            ml, me = n_layer, n_embd
+        model = create_model(model_type, ml, n_head, me, n_streams, block_size)
         results[model_type] = count_params(model)
     
     return results
 
 
+def find_matching_config(target_params: int, model_type: str, n_head: int = 4, 
+                         n_embd: int = 128, n_streams: int = 4, 
+                         block_size: int = 64, max_layers: int = 20) -> dict:
+    """
+    Find the config that gives closest parameter count to target.
+    
+    For JPmHC, also searches over n_embd since its sub-layer F operates at
+    d_stream = n_embd // n_streams (paper Section 3.2), requiring wider n_embd
+    to get sufficient per-layer capacity.
+    
+    Prefers practical depth (<=20 layers) over extreme depth.
+    
+    Returns:
+        dict with keys: n_layer, n_embd, params, ratio
+    """
+    best = {'n_layer': None, 'n_embd': n_embd, 'params': None, 'ratio': 0}
+    best_diff = float('inf')
+    
+    embd_candidates = [n_embd]
+    if model_type == 'jpmhc':
+        embd_candidates = [512, 256, 128]
+    
+    for me in embd_candidates:
+        for nl in range(1, max_layers + 1):
+            try:
+                model = create_model(model_type, nl, n_head, me, n_streams, block_size)
+                params = count_params(model)
+                diff = abs(params - target_params)
+                
+                if diff < best_diff:
+                    best_diff = diff
+                    best = {'n_layer': nl, 'n_embd': me, 'params': params,
+                            'ratio': params / target_params}
+                if params > target_params * 1.5:
+                    break
+            except Exception:
+                continue
+        if best['params'] and abs(best['params'] - target_params) / target_params < 0.05:
+            break
+    
+    return best
+
+
 def find_matching_nlayer(target_params: int, model_type: str, n_head: int = 4, 
                          n_embd: int = 128, n_streams: int = 4, 
-                         block_size: int = 64, max_layers: int = 20) -> tuple:
+                         block_size: int = 64, max_layers: int = 100) -> tuple:
     """
     Find the n_layer value that gives closest parameter count to target.
+    Backward-compatible wrapper around find_matching_config.
     
     Returns:
         (best_n_layer, best_params, ratio)
     """
-    best_n_layer = None
-    best_params = None
-    best_diff = float('inf')
-    
-    for n_layer in range(1, max_layers + 1):
-        try:
-            model = create_model(model_type, n_layer, n_head, n_embd, n_streams, block_size)
-            params = count_params(model)
-            diff = abs(params - target_params)
-            
-            if diff < best_diff:
-                best_diff = diff
-                best_n_layer = n_layer
-                best_params = params
-        except Exception:
-            continue
-    
-    ratio = best_params / target_params if best_params else 0
-    return best_n_layer, best_params, ratio
+    result = find_matching_config(target_params, model_type, n_head, n_embd,
+                                  n_streams, block_size, max_layers)
+    return result['n_layer'], result['params'], result['ratio']
 
 
 def print_comparison_table(results: dict, reference: str = 'edelta'):
@@ -249,28 +294,33 @@ Examples:
         print(f"\nReference: E∆-MHC-Geo (n_layer={args.n_layer})")
         print(f"Target: {target_params:,} ({target_params/1e6:.3f}M)")
         
-        print(f"\n{'Model':<8} {'n_layer':>8} {'Parameters':>12} {'Millions':>10} {'Ratio':>8}")
-        print("-" * 50)
-        print(f"{'edelta':<8} {args.n_layer:>8} {target_params:>12,} {target_params/1e6:>10.3f}M {'1.000x':>8}")
+        print(f"\n{'Model':<8} {'n_layer':>8} {'n_embd':>8} {'Parameters':>12} {'Millions':>10} {'Ratio':>8}")
+        print("-" * 60)
+        print(f"{'edelta':<8} {args.n_layer:>8} {args.n_embd:>8} {target_params:>12,} {target_params/1e6:>10.3f}M {'1.000x':>8}")
         
         for model_type in ['gpt', 'ddl', 'mhc', 'jpmhc']:
             with suppress_stdout():
-                n_layer, params, ratio = find_matching_nlayer(
+                result = find_matching_config(
                     target_params, model_type, args.n_head, args.n_embd,
                     args.n_streams, args.block_size
                 )
-            print(f"{model_type:<8} {n_layer:>8} {params:>12,} {params/1e6:>10.3f}M {ratio:>7.3f}x")
+            nl, me = result['n_layer'], result['n_embd']
+            params, ratio = result['params'], result['ratio']
+            print(f"{model_type:<8} {nl:>8} {me:>8} {params:>12,} {params/1e6:>10.3f}M {ratio:>7.3f}x")
         
-        print("\n" + "-" * 50)
-        print("Recommended configuration for --match_proposed_params:")
-        print("BASELINE_NLAYER_FOR_MATCH = {")
+        print("\n" + "-" * 60)
+        print("Recommended BASELINE_MATCH_CONFIG for --match_proposed_params:")
+        print("BASELINE_MATCH_CONFIG = {")
         for model_type in ['gpt', 'ddl', 'mhc', 'jpmhc']:
             with suppress_stdout():
-                n_layer, params, _ = find_matching_nlayer(
+                result = find_matching_config(
                     target_params, model_type, args.n_head, args.n_embd,
                     args.n_streams, args.block_size
                 )
-            print(f"    '{model_type if model_type != 'gpt' else 'gpt2'}': {n_layer},  # {params/1e6:.3f}M")
+            nl, me = result['n_layer'], result['n_embd']
+            name = 'gpt2' if model_type == 'gpt' else model_type
+            embd_str = f", 'n_embd': {me}" if me != args.n_embd else ""
+            print(f"    '{name}': {{'n_layer': {nl}{embd_str}}},  # {result['params']/1e6:.3f}M")
         print("}")
         
     elif args.breakdown:

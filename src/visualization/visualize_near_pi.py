@@ -86,14 +86,14 @@ MARKERS = {
 
 NEAR_PI_DIRS = {
     'single': {
-        'GPT': 'out-matched/near_pi_rotation-baseline',
+        'GPT': 'out-matched/near_pi_rotation-gpt2',
         'DDL': 'out-matched/near_pi_rotation-ddl',
         'mHC': 'out-matched/near_pi_rotation-mhc',
         'JPmHC': 'out-matched/near_pi_rotation-jpmhc',
         'E∆-MHC-Geo': 'out-matched/near_pi_rotation-proposed',
     },
     'multi': {
-        'GPT': 'out-matched/near_pi_rotation_multiplane-baseline',
+        'GPT': 'out-matched/near_pi_rotation_multiplane-gpt2',
         'DDL': 'out-matched/near_pi_rotation_multiplane-ddl',
         'mHC': 'out-matched/near_pi_rotation_multiplane-mhc',
         'JPmHC': 'out-matched/near_pi_rotation_multiplane-jpmhc',

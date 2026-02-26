@@ -2,16 +2,16 @@
 JPmHC Implementation (JP Morgan Hyper-Connections with Cayley Retraction)
 Reference: Sengupta, Wang & Brunswic, arXiv:2602.18308, February 2026
 
-This implements JPmHC's key architectural choices for fair comparison:
+Faithful to the paper's architecture:
 
 Architecture (Parallel Routing, their Equation 14):
     x_out = H_res · x_streams + H_post · (y ⊗ 1_n)
     where y = F(avg(H_pre · x_streams))
 
-The residual path (H_res) and compute path (H_pre → F → H_post)
-operate in PARALLEL on the same input, applying different transforms.
+F operates on a SINGLE d-dimensional stream-averaged vector (Section 3.2:
+"F is the sub-layer, evaluated once on a single p-dimensional vector").
 
-Coefficient Computation (their Equation 12):
+Coefficient Computation (their Equation 12/35):
     [H̃_pre | H̃_post | H̃_res] = W_fused · LayerNorm(x_flat)
 
 Constraints:
@@ -19,10 +19,10 @@ Constraints:
     H_post = softmax(H̃_post, dim=-2)       → column-stochastic
     H_res  = IterativeCayley(H̃_res - H̃_res^T)  → approx orthogonal
 
-Iterative Cayley (their Algorithm 3, Appendix B.2):
+Iterative Cayley (their Algorithm 8, Appendix I.2):
     W = H̃_res - H̃_res^T  (skew-symmetrize)
-    Y_0 = I
-    Y_{i+1} = I + (α/2) W (I + Y_i),  i = 0, ..., s-1
+    Y_0 = I + αW            (initialization, their Eq. 31)
+    Y_{i+1} = I + (α/2) W (I + Y_i),  i = 0, ..., s-1  (their Eq. 32)
     with α = 0.1, s = 2 iterations
 
 Key differences from E∆-MHC-Geo:
@@ -31,6 +31,7 @@ Key differences from E∆-MHC-Geo:
     - Iterative approximation (vs exact analytical solve)
     - SO(n) only (vs full O(n) with Householder gate)
     - Per-token dynamic pre/post (vs learned weight matrices)
+    - Sub-layer F on single stream d (vs full n_embd)
 """
 
 import math
@@ -44,13 +45,16 @@ from torch.nn import functional as F
 
 def iterative_cayley(H_tilde, alpha=0.1, n_iters=2):
     """
-    Iterative fixed-point Cayley retraction (JPmHC Algorithm 3).
+    Iterative fixed-point Cayley retraction (JPmHC Algorithm 8).
 
-    Approximates Q = (I + W/2)^{-1}(I - W/2) via fixed-point iteration:
-        Y_{i+1} = I + (α/2) W (I + Y_i)
+    Given unconstrained H̃, skew-symmetrizes to W = H̃ − H̃^T,
+    then approximates the Cayley retraction via fixed-point iteration.
 
-    The result is approximately orthogonal with deviation
-    ||Y^T Y - I||_max < 10^{-3} at s=2, α=0.1 (their Proposition I.1).
+    Initialization (their Eq. 31):  Y₀ = I + αW
+    Iteration (their Eq. 32):       Y_{i+1} = I + (α/2) W(I + Y_i)
+
+    With s=2, α=0.1 this achieves ||Y^T Y - I||_max < 10^{-3}
+    (their Proposition I.1).
 
     Args:
         H_tilde: (*, n, n) unconstrained matrix
@@ -65,7 +69,7 @@ def iterative_cayley(H_tilde, alpha=0.1, n_iters=2):
     n = W.shape[-1]
     I = torch.eye(n, device=W.device, dtype=W.dtype)
 
-    Y = I.expand_as(W).clone()
+    Y = I + alpha * W
     for _ in range(n_iters):
         Y = I + (alpha / 2) * torch.matmul(W, I + Y)
 
@@ -77,8 +81,12 @@ class JPmHCModule(nn.Module):
     JPmHC dynamic routing module with per-token matrix generation.
 
     Generates all three n×n mixing matrices (H_pre, H_post, H_res)
-    dynamically per token via a single fused linear projection, then
-    applies parallel routing: x_out = H_res·x + H_post·F(avg(H_pre·x)).
+    dynamically per token via a single fused linear projection (Eq. 12/35),
+    then applies parallel routing (Eq. 14):
+        x_out = H_res·x + H_post·(F(avg(H_pre·x)) ⊗ 1_n)
+
+    F is evaluated on a single d-dimensional stream-averaged vector,
+    per the paper's Section 3.2 and Figure 2.
     """
 
     def __init__(self, n_streams=4, n_embd=None, cayley_alpha=0.1,
@@ -92,7 +100,6 @@ class JPmHCModule(nn.Module):
 
         self.norm = nn.LayerNorm(n_embd, elementwise_affine=True)
 
-        # Fused projection: predict 3 n×n matrices in one shot
         self.fused_proj = nn.Linear(n_embd, 3 * n_streams * n_streams,
                                     bias=True)
 
@@ -104,16 +111,13 @@ class JPmHCModule(nn.Module):
             nn.init.zeros_(self.fused_proj.weight)
             bias = self.fused_proj.bias
             n = self.n_streams
-            # H_pre bias → identity-like (uniform softmax)
             bias[:n * n].zero_()
-            # H_post bias → identity-like (uniform softmax)
             bias[n * n:2 * n * n].zero_()
-            # H_res bias → identity (Cayley of zero = I)
             bias[2 * n * n:].zero_()
 
     def compute_mappings(self, x_streams):
         """
-        Compute per-token dynamic mixing matrices.
+        Compute per-token dynamic mixing matrices (Eq. 12/35).
 
         Args:
             x_streams: (B, T, n, d) multi-stream input
@@ -143,13 +147,15 @@ class JPmHCModule(nn.Module):
 
     def forward(self, x_streams, layer_fn, ln):
         """
-        Apply JPmHC parallel routing (their Equation 14):
-            x_out = H_res · x_streams + H_post · (F(avg(H_pre · x)) ⊗ 1_n)
+        Apply JPmHC parallel routing (their Equation 14).
+
+        Per the paper, F is evaluated on a single d-dimensional
+        stream-averaged vector, not the full nd-dimensional embedding.
 
         Args:
             x_streams: (B, T, n, d)
-            layer_fn: Attention or MLP function
-            ln: LayerNorm to apply before layer_fn
+            layer_fn: Attention or MLP function (operates on d dimensions)
+            ln: LayerNorm to apply before layer_fn (d-dimensional)
 
         Returns:
             x_out: (B, T, n, d)
@@ -161,20 +167,20 @@ class JPmHCModule(nn.Module):
         # Residual path: H_res · x_streams
         x_mixed = torch.einsum('btij,btjd->btid', H_res, x_streams)
 
-        # Compute path: H_pre → average → F → H_post broadcast
+        # Compute path: H_pre → stream average → LN → F → broadcast → H_post
         x_pre = torch.einsum('btij,btjd->btid', H_pre, x_streams)
-        x_agg = x_pre.mean(dim=2)  # (B, T, d)
+        x_agg = x_pre.mean(dim=2)  # (B, T, d) — single stream average
 
-        x_agg_full = x_agg.unsqueeze(2).expand(-1, -1, n, -1)
-        x_agg_full = x_agg_full.reshape(B, T, -1)
-        x_ln = ln(x_agg_full)
-        f_out = layer_fn(x_ln)
-        f_out_streams = f_out.reshape(B, T, n, d)
+        x_ln = ln(x_agg)           # LN on d-dimensional vector
+        y = layer_fn(x_ln)         # F on d-dimensional vector → (B, T, d)
 
-        x_broadcast = torch.einsum('btij,btjd->btid', H_post,
-                                   f_out_streams)
+        # Broadcast: y ⊗ 1_n → (B, T, n, d)
+        y_broadcast = y.unsqueeze(2).expand(-1, -1, n, -1)
 
-        x_out = x_mixed + x_broadcast
+        # H_post distributes output across streams
+        x_post = torch.einsum('btij,btjd->btid', H_post, y_broadcast)
+
+        x_out = x_mixed + x_post
         return x_out
 
 
@@ -192,17 +198,20 @@ class LayerNorm(nn.Module):
 
 
 class CausalSelfAttention(nn.Module):
+    """Self-attention operating on d_stream dimensions (single stream width)."""
+
     def __init__(self, config):
         super().__init__()
-        assert config.n_embd % config.n_head == 0
-        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd,
+        self.d_stream = config.d_stream
+        self.n_head = config.n_head_stream
+        assert self.d_stream % self.n_head == 0
+
+        self.c_attn = nn.Linear(self.d_stream, 3 * self.d_stream,
                                 bias=config.bias)
-        self.c_proj = nn.Linear(config.n_embd, config.n_embd,
+        self.c_proj = nn.Linear(self.d_stream, self.d_stream,
                                 bias=config.bias)
         self.attn_dropout = nn.Dropout(config.dropout)
         self.resid_dropout = nn.Dropout(config.dropout)
-        self.n_head = config.n_head
-        self.n_embd = config.n_embd
         self.dropout = config.dropout
         self.flash = hasattr(torch.nn.functional,
                              'scaled_dot_product_attention')
@@ -214,7 +223,7 @@ class CausalSelfAttention(nn.Module):
 
     def forward(self, x):
         B, T, C = x.size()
-        q, k, v = self.c_attn(x).split(self.n_embd, dim=2)
+        q, k, v = self.c_attn(x).split(self.d_stream, dim=2)
         k = k.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
         q = q.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
         v = v.view(B, T, self.n_head, C // self.n_head).transpose(1, 2)
@@ -236,12 +245,14 @@ class CausalSelfAttention(nn.Module):
 
 
 class MLP(nn.Module):
+    """FFN operating on d_stream dimensions (single stream width)."""
+
     def __init__(self, config):
         super().__init__()
-        self.c_fc = nn.Linear(config.n_embd, 4 * config.n_embd,
+        self.c_fc = nn.Linear(config.d_stream, 4 * config.d_stream,
                               bias=config.bias)
         self.gelu = nn.GELU()
-        self.c_proj = nn.Linear(4 * config.n_embd, config.n_embd,
+        self.c_proj = nn.Linear(4 * config.d_stream, config.d_stream,
                                 bias=config.bias)
         self.dropout = nn.Dropout(config.dropout)
 
@@ -255,10 +266,12 @@ class MLP(nn.Module):
 
 class Block(nn.Module):
     """
-    Transformer block with JPmHC parallel routing.
+    Transformer block with JPmHC parallel routing (Figure 2).
 
-    Uses per-token dynamic generation of H_pre, H_post, H_res
-    with iterative Cayley retraction for H_res.
+    Sub-layer F (attention/MLP) operates on d_stream = n_embd // n_streams
+    per the paper's Section 3.2: "evaluated once on a single p-dimensional
+    vector". The JPmHC module generates mixing matrices from the full
+    nd-dimensional representation.
     """
 
     def __init__(self, config):
@@ -269,15 +282,30 @@ class Block(nn.Module):
 
         assert config.n_embd % self.n_streams == 0
 
-        self.ln_1 = LayerNorm(config.n_embd, bias=config.bias)
-        self.ln_2 = LayerNorm(config.n_embd, bias=config.bias)
+        # Sub-layer LNs operate on d_stream (single stream, per paper)
+        self.ln_1 = LayerNorm(self.d_stream, bias=config.bias)
+        self.ln_2 = LayerNorm(self.d_stream, bias=config.bias)
 
-        self.attn = CausalSelfAttention(config)
-        self.mlp = MLP(config)
+        # Compute n_head for stream-level attention
+        n_head_stream = min(getattr(config, 'n_head', 4), self.d_stream)
+        while self.d_stream % n_head_stream != 0:
+            n_head_stream -= 1
+
+        # Attention and MLP operate on d_stream (per paper Section 3.2)
+        stream_cfg = _StreamConfig(
+            d_stream=self.d_stream,
+            n_head_stream=n_head_stream,
+            dropout=config.dropout,
+            bias=config.bias,
+            block_size=config.block_size,
+        )
+        self.attn = CausalSelfAttention(stream_cfg)
+        self.mlp = MLP(stream_cfg)
 
         cayley_alpha = getattr(config, 'cayley_alpha', 0.1)
         cayley_iters = getattr(config, 'cayley_iters', 2)
 
+        # JPmHC modules use full n_embd for mixing matrix generation
         self.jpmhc_attn = JPmHCModule(
             n_streams=self.n_streams,
             n_embd=self.n_embd,
@@ -302,6 +330,16 @@ class Block(nn.Module):
 
 
 @dataclass
+class _StreamConfig:
+    """Config for stream-level sub-layers (attention, MLP)."""
+    d_stream: int = 32
+    n_head_stream: int = 4
+    dropout: float = 0.0
+    bias: bool = True
+    block_size: int = 1024
+
+
+@dataclass
 class GPTConfig:
     block_size: int = 1024
     vocab_size: int = 50304
@@ -321,11 +359,12 @@ class GPT(nn.Module):
 
     Reference: Sengupta, Wang & Brunswic, arXiv:2602.18308
 
-    Key features:
-    1. Per-token dynamic generation of all mixing matrices
-    2. Iterative Cayley retraction for approximate orthogonality
-    3. Parallel routing: H_res path || H_pre → F → H_post path
-    4. Row-stochastic H_pre, column-stochastic H_post
+    Faithful to the paper's architecture:
+    1. Per-token dynamic generation of all mixing matrices (Eq. 12)
+    2. Iterative Cayley retraction with Y₀ = I + αW init (Algorithm 8)
+    3. Parallel routing: H_res path || H_pre → F → H_post path (Eq. 14)
+    4. F operates on single d-dimensional stream average (Section 3.2)
+    5. Row-stochastic H_pre, column-stochastic H_post (Eq. 13)
 
     Limitations vs E∆-MHC-Geo:
     - Approximate orthogonality (||Y^T Y - I|| < 10^{-3})
@@ -355,10 +394,12 @@ class GPT(nn.Module):
                 torch.nn.init.normal_(p, mean=0.0,
                                       std=0.02 / math.sqrt(2 * config.n_layer))
 
+        d_stream = config.n_embd // config.n_streams
         print(f"JPmHC model - parameters: {self.get_num_params() / 1e6:.2f}M")
-        print(f"  n_streams: {config.n_streams}")
-        print(f"  Cayley iterations: {config.cayley_iters}")
-        print(f"  Cayley alpha: {config.cayley_alpha}")
+        print(f"  n_streams: {config.n_streams}, d_stream: {d_stream}")
+        print(f"  Cayley iterations: {config.cayley_iters}, alpha: {config.cayley_alpha}")
+        print(f"  Cayley init: Y₀ = I + αW (Algorithm 8)")
+        print(f"  Sub-layer F width: {d_stream} (single stream, per paper Sec 3.2)")
         print(f"  Routing: PARALLEL (H_res || H_pre→F→H_post)")
 
     def get_num_params(self, non_embedding=True):

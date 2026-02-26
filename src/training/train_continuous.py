@@ -213,18 +213,22 @@ def create_model(args, input_dim: int, block_size: int):
     use_mhc_projections = True
     geo_hidden_ratio = 4  # Default for E∆-MHC-Geo
     
-    # Map baseline n_layer to match E∆-MHC-Geo's param count (keeping n_embd=128)
-    BASELINE_NLAYER_FOR_MATCH = {
-        'gpt2': 9,    # 1.780M params (0.996x)
-        'ddl': 8,     # 1.784M params (0.998x)
-        'mhc': 9,     # 1.838M params (1.028x)
-        'jpmhc': 9,   # 1.896M params (1.061x)
+    # Map baselines to match E∆-MHC-Geo's param count (~1.79M)
+    # JPmHC needs n_embd=512 because its sub-layer F operates at d_stream=n_embd/n_streams
+    # (paper Section 3.2), so d_stream=128 requires n_embd=512 with n_streams=4
+    BASELINE_MATCH_CONFIG = {
+        'gpt2':  {'n_layer': 9},                      # 1.780M (0.996x)
+        'ddl':   {'n_layer': 8},                      # 1.784M (0.998x)
+        'mhc':   {'n_layer': 9},                      # 1.838M (1.028x)
+        'jpmhc': {'n_layer': 7, 'n_embd': 512},      # 1.771M (0.991x)
     }
     
     if args.match_proposed_params and args.model_type != 'edelta':
-        n_layer = BASELINE_NLAYER_FOR_MATCH.get(args.model_type, args.n_layer)
-        print(f"\n[MATCH PROPOSED] Scaling up {args.model_type} n_layer: {args.n_layer} → {n_layer}")
-        print(f"                 (keeping n_embd={n_embd} for same representation dimension)")
+        match_cfg = BASELINE_MATCH_CONFIG.get(args.model_type, {})
+        n_layer = match_cfg.get('n_layer', args.n_layer)
+        n_embd = match_cfg.get('n_embd', n_embd)
+        print(f"\n[MATCH PROPOSED] {args.model_type}: n_layer={n_layer}, n_embd={n_embd}")
+        print(f"                 (targeting ~1.79M to match E∆-MHC-Geo)")
     
     if args.model_type == 'gpt2':
         print(f"\n=== Standard GPT (Baseline) ===")

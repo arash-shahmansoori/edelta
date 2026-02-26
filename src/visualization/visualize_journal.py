@@ -73,14 +73,14 @@ LINE_STYLES = {
 # Data directories (gyroscope and stability only - correction handled separately in experiments/)
 GRADNORM_DIRS = {
     'gyroscope': {
-        'GPT': 'out-matched/gyroscope-baseline',
+        'GPT': 'out-matched/gyroscope-gpt',
         'DDL': 'out-matched/gyroscope-ddl',
         'mHC': 'out-matched/gyroscope-mhc',
         'JPmHC': 'out-matched/gyroscope-jpmhc',
         'E∆-MHC-Geo': 'out-matched/gyroscope-proposed',
     },
     'stability': {
-        'GPT': 'out-matched/stability-baseline',
+        'GPT': 'out-matched/stability-gpt',
         'DDL': 'out-matched/stability-ddl',
         'mHC': 'out-matched/stability-mhc',
         'JPmHC': 'out-matched/stability-jpmhc',
