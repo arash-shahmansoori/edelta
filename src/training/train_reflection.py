@@ -709,6 +709,7 @@ def run_sample_efficiency_test(
     sample_sizes: list = None,
     save_figures: bool = False,
     output_dir: str = 'results',
+    seed: int = 42,
 ):
     """
     Test sample efficiency for geometric operators: DDL vs E∆-MHC-Geo.
@@ -748,7 +749,7 @@ def run_sample_efficiency_test(
         flush_print(f"Training with {n_samples} samples")
         flush_print("="*60)
         
-        train_x, train_y = generate_negation_data(n_samples, dim, device, seed=42)
+        train_x, train_y = generate_negation_data(n_samples, dim, device, seed=seed)
         
         models = {
             'DDL': SimpleDDL(dim).to(device),
@@ -1135,6 +1136,7 @@ def main():
     parser.add_argument('--n_samples', type=int, default=100, help='Samples for single mode')
     parser.add_argument('--save_figures', action='store_true', help='Save publication figures')
     parser.add_argument('--output_dir', type=str, default='results', help='Output directory')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed for training data')
     args = parser.parse_args()
     
     flush_print("="*80)
@@ -1156,6 +1158,7 @@ def main():
             max_iters=args.max_iters,
             save_figures=args.save_figures,
             output_dir=args.output_dir,
+            seed=args.seed,
         )
     elif args.mode == 'trajectory':
         # Detailed trajectory analysis with single sample size
