@@ -418,6 +418,107 @@ class SimpleJPmHC(nn.Module):
         return (QtQ - I).abs().max().item()
 
 
+class SimpleStreamHybrid(nn.Module):
+    """
+    E∆-Stream Hybrid: stream-level Cayley + full-dim Householder + gate.
+
+    Design principle:
+    - γ→1: Cayley rotation on n_streams space (efficient, n×n solve)
+    - γ→0: Householder reflection on FULL dimension (exact negation, d×d)
+
+    The Cayley operates on streams (rotations compose across layers),
+    while the Householder operates on the full vector (negation requires
+    full-dimensional access). The gate learns which to use.
+
+    For y = -x: gate should converge to γ → 0 (full-dim Householder).
+    """
+
+    def __init__(self, dim: int, n_streams: int = 4, geo_hidden_dim: int = 48,
+                 gate_reg_weight: float = 0.5):
+        super().__init__()
+        assert dim % n_streams == 0
+        self.dim = dim
+        self.n_streams = n_streams
+        self.d_stream = dim // n_streams
+        self.gate_reg_weight = gate_reg_weight
+
+        # Cayley params: u(n) + v(n) + β(1) on stream space
+        # Householder: k(dim) on FULL dimension
+        # Gate: γ(1)
+        self.out_dim = 2 * n_streams + 1 + dim + 1
+
+        self.norm = nn.LayerNorm(dim)
+        self.geo_proj = nn.Sequential(
+            nn.Linear(dim, geo_hidden_dim),
+            nn.GELU(),
+            nn.Linear(geo_hidden_dim, self.out_dim),
+        )
+
+        with torch.no_grad():
+            nn.init.zeros_(self.geo_proj[0].weight)
+            nn.init.zeros_(self.geo_proj[0].bias)
+            nn.init.zeros_(self.geo_proj[2].weight)
+            bias = self.geo_proj[2].bias
+            n = n_streams
+            bias[:-1].zero_()
+            bias[-1].fill_(-1.5)  # gate bias → γ≈0.18
+
+        self.register_buffer('I', torch.eye(n_streams))
+        self.register_buffer('householder_beta', torch.tensor(2.0))
+        self._gate_reg_loss = None
+        self._last_gamma = 0.5
+
+    def forward(self, x):
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
+        B = x.shape[0]
+        n = self.n_streams
+
+        x_streams = x.view(B, n, self.d_stream)
+
+        x_norm = self.norm(x)
+        params = self.geo_proj(x_norm)
+
+        idx = 0
+        u = params[:, idx:idx+n]; idx += n
+        v = params[:, idx:idx+n]; idx += n
+        beta = F.softplus(params[:, idx:idx+1]); idx += 1
+        k_raw = params[:, idx:idx+self.dim]; idx += self.dim
+        gate_logit = params[:, idx:idx+1]
+
+        k = F.normalize(k_raw + 1e-8, dim=-1)  # full-dim direction
+        gamma = torch.sigmoid(gate_logit)
+
+        self._gate_reg_loss = self.gate_reg_weight * 4 * gamma * (1 - gamma)
+        self._gate_reg_loss = self._gate_reg_loss.mean()
+        self._last_gamma = gamma.detach().mean().item()
+
+        # Cayley rotation on stream space (n×n)
+        A = torch.einsum('bi,bj->bij', u, v) - torch.einsum('bi,bj->bij', v, u)
+        M = (beta.view(B, 1, 1) / 2) * A
+        I_batch = self.I.unsqueeze(0).expand(B, -1, -1)
+        Q = torch.linalg.solve(I_batch + M, I_batch - M)
+        x_rot = torch.einsum('bnm,bmd->bnd', Q, x_streams).reshape(B, self.dim)
+
+        # Householder reflection on FULL dimension (d×d)
+        k_dot_x = (k * x).sum(dim=-1, keepdim=True)
+        x_ref = x - self.householder_beta * k_dot_x * k
+
+        # Blend
+        x_out = gamma * x_rot + (1 - gamma) * x_ref
+        return x_out
+
+    def get_gate(self, x):
+        if x.dim() == 1:
+            x = x.unsqueeze(0)
+        x_norm = self.norm(x)
+        params = self.geo_proj(x_norm)
+        return torch.sigmoid(params[:, -1:])
+
+    def get_gate_regularization_loss(self):
+        return self._gate_reg_loss if self._gate_reg_loss is not None else 0.0
+
+
 # =============================================================================
 # TRAINING AND ANALYSIS
 # =============================================================================
