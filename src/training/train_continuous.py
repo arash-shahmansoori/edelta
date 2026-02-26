@@ -183,6 +183,8 @@ def get_args():
                         help='Initial gate bias (>0=prefer rotation, <0=prefer reflection)')
     parser.add_argument('--geo_hidden_ratio', type=int, default=4,
                         help='Geometric operator hidden dim = n_embd // geo_hidden_ratio')
+    parser.add_argument('--geo_hidden_dim', type=int, default=48,
+                        help='Fused geo operator hidden dim (for edelta_stream)')
     
     # Fair comparison mode
     parser.add_argument('--match_proposed_params', action='store_true',
@@ -331,7 +333,7 @@ def create_model(args, input_dim: int, block_size: int):
             vocab_size=1,
             gate_reg_weight=args.gate_reg_weight,
             init_gate_bias=args.init_gate_bias,
-            geo_hidden_ratio=geo_hidden_ratio,
+            geo_hidden_dim=args.geo_hidden_dim,
         )
         core = EdeltaStreamGPT(config)
 
