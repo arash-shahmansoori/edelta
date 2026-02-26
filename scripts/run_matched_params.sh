@@ -48,9 +48,9 @@ for SEED in $SEEDS; do
         echo ""
         echo "=== ${DATASET} (seed=${SEED}) ==="
 
-        for MODEL in gpt2 ddl mhc jpmhc edelta; do
+        for MODEL in gpt2 ddl mhc jpmhc; do
             OUTDIR="out-matched/${DATASET}-${MODEL}${SUFFIX}"
-            echo "  Training ${MODEL}..."
+            echo "  Training ${MODEL} (--match_proposed_params)..."
             uv run src/training/train_continuous.py \
                 --model_type $MODEL \
                 --dataset $DATASET \
@@ -59,6 +59,16 @@ for SEED in $SEEDS; do
                 --seed $SEED \
                 --match_proposed_params 2>&1 | tail -1
         done
+
+        # E∆ is the reference — no --match_proposed_params needed
+        OUTDIR="out-matched/${DATASET}-proposed${SUFFIX}"
+        echo "  Training edelta (reference, 6L)..."
+        uv run src/training/train_continuous.py \
+            --model_type edelta \
+            --dataset $DATASET \
+            --out_dir $OUTDIR \
+            --max_iters $MAX_ITERS \
+            --seed $SEED 2>&1 | tail -1
     done
 done
 
