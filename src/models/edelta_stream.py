@@ -206,14 +206,53 @@ class LayerNorm(nn.Module):
                             self.bias, 1e-5)
 
 
+class StreamRouter(nn.Module):
+    """
+    Dynamic per-token stream routing (like JPmHC's H_pre/H_post).
+
+    Generates n×n row-stochastic (pre) and column-stochastic (post)
+    mixing matrices from the input, enabling selective aggregation
+    and distribution across streams.
+    """
+
+    def __init__(self, n_embd, n_streams):
+        super().__init__()
+        self.n_streams = n_streams
+        self.norm = nn.LayerNorm(n_embd, elementwise_affine=True)
+        self.proj = nn.Linear(n_embd, 2 * n_streams * n_streams, bias=True)
+        self._init_weights()
+
+    def _init_weights(self):
+        with torch.no_grad():
+            nn.init.zeros_(self.proj.weight)
+            self.proj.bias.zero_()
+
+    def forward(self, x_streams):
+        """
+        Args:
+            x_streams: (B, T, n, d)
+        Returns:
+            H_pre: (B, T, n, n) row-stochastic
+            H_post: (B, T, n, n) column-stochastic
+        """
+        B, T, n, d = x_streams.shape
+        x_flat = x_streams.reshape(B, T, -1)
+        x_norm = self.norm(x_flat)
+        raw = self.proj(x_norm).view(B, T, 2, n, n)
+
+        H_pre = F.softmax(raw[:, :, 0], dim=-1)   # row-stochastic
+        H_post = F.softmax(raw[:, :, 1], dim=-2)   # column-stochastic
+        return H_pre, H_post
+
+
 class Block(nn.Module):
     """
-    E∆-Stream Block: Fused geometric operator + per-stream compute.
+    E∆-Stream Block: Geometric operator + dynamic routing + per-stream F.
 
-    1. G_γ(X) — fused geometric operator on full n_embd (single Linear)
-    2. Reshape to streams, average to d_stream
-    3. LN → F (attention/MLP at d_stream) → broadcast back
-    4. X_{l+1} = G_γ(X) + broadcast(F(LN(avg(G_γ(X)))))
+    X_{l+1} = G_γ(X) + H_post · (F(avg(H_pre · G_γ(X))) ⊗ 1_n)
+
+    Key fix: uses dynamic per-token H_pre/H_post routing (like JPmHC)
+    instead of crude mean+broadcast, preserving stream differentiation.
     """
 
     def __init__(self, config):
@@ -238,7 +277,7 @@ class Block(nn.Module):
         init_gate_bias = getattr(config, 'init_gate_bias', 0.0)
         gate_reg_weight = getattr(config, 'gate_reg_weight', 0.1)
 
-        geo_hidden_dim = getattr(config, 'geo_hidden_dim', 32)
+        geo_hidden_dim = getattr(config, 'geo_hidden_dim', 48)
         self.geo_attn = FusedGeoOperator(
             config.n_embd, self.n_streams, init_gate_bias, gate_reg_weight,
             geo_hidden_dim)
@@ -246,21 +285,40 @@ class Block(nn.Module):
             config.n_embd, self.n_streams, init_gate_bias, gate_reg_weight,
             geo_hidden_dim)
 
+        # Dynamic stream routing (like JPmHC's H_pre/H_post)
+        self.router_attn = StreamRouter(config.n_embd, self.n_streams)
+        self.router_mlp = StreamRouter(config.n_embd, self.n_streams)
+
     def forward(self, x):
         B, T, D = x.shape
         n, d = self.n_streams, self.d_stream
 
-        # Attention sub-block
-        x_geo = self.geo_attn(x)
-        x_agg = x_geo.reshape(B, T, n, d).mean(dim=2)
-        y = self.attn(self.ln_1(x_agg))
-        x = x_geo + y.unsqueeze(2).expand(-1, -1, n, -1).reshape(B, T, D)
+        # === Attention sub-block ===
+        x_geo = self.geo_attn(x)                          # G_γ(X)
+        x_streams = x_geo.reshape(B, T, n, d)
 
-        # MLP sub-block
+        H_pre, H_post = self.router_attn(x_streams)       # dynamic routing
+
+        # H_pre selectively aggregates → average → F → H_post distributes
+        x_pre = torch.einsum('btij,btjd->btid', H_pre, x_streams)
+        x_agg = x_pre.mean(dim=2)                         # (B, T, d)
+        y = self.attn(self.ln_1(x_agg))                   # F at d_stream
+        y_bc = y.unsqueeze(2).expand(-1, -1, n, -1)       # broadcast
+        y_post = torch.einsum('btij,btjd->btid', H_post, y_bc)
+        x = x_geo + y_post.reshape(B, T, D)
+
+        # === MLP sub-block ===
         x_geo = self.geo_mlp(x)
-        x_agg = x_geo.reshape(B, T, n, d).mean(dim=2)
+        x_streams = x_geo.reshape(B, T, n, d)
+
+        H_pre, H_post = self.router_mlp(x_streams)
+
+        x_pre = torch.einsum('btij,btjd->btid', H_pre, x_streams)
+        x_agg = x_pre.mean(dim=2)
         y = self.mlp(self.ln_2(x_agg))
-        x = x_geo + y.unsqueeze(2).expand(-1, -1, n, -1).reshape(B, T, D)
+        y_bc = y.unsqueeze(2).expand(-1, -1, n, -1)
+        y_post = torch.einsum('btij,btjd->btid', H_post, y_bc)
+        x = x_geo + y_post.reshape(B, T, D)
 
         return x
 
