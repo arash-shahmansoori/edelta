@@ -220,12 +220,16 @@ def create_figure_2_stability_analysis():
         saved_config = checkpoint['config']
         model_type = saved_config['model_type']
         
-        # Detect actual n_layer from state_dict (may differ from config due to parameter matching)
+        # Detect actual architecture from state_dict (may differ from saved config
+        # due to --match_proposed_params adjusting n_layer and/or n_embd)
         layers = set()
-        block_size = 128  # default
+        block_size = 128
+        actual_n_embd = saved_config['n_embd']
         for k, v in checkpoint['model'].items():
             if 'pos_emb' in k:
                 block_size = v.shape[1]
+            if 'core.transformer.wpe.weight' in k:
+                actual_n_embd = v.shape[1]
             if '.h.' in k:
                 layer_num = k.split('.h.')[1].split('.')[0]
                 layers.add(int(layer_num))
@@ -241,9 +245,9 @@ def create_figure_2_stability_analysis():
         
         GPTClass, ConfigClass = model_map[model_type]
         config_args = {
-            'n_layer': actual_n_layer,  # Use actual layer count from state_dict
+            'n_layer': actual_n_layer,
             'n_head': saved_config['n_head'],
-            'n_embd': saved_config['n_embd'],
+            'n_embd': actual_n_embd,
             'dropout': saved_config['dropout'],
             'bias': False,
             'block_size': block_size,
@@ -255,7 +259,8 @@ def create_figure_2_stability_analysis():
         config = ConfigClass(**config_args)
         core_model = GPTClass(config)
         
-        input_dim = 64
+        input_proj_key = [k for k in checkpoint['model'] if 'input_proj.weight' in k]
+        input_dim = checkpoint['model'][input_proj_key[0]].shape[1] if input_proj_key else 64
         model = ContinuousModelWrapper(core_model, config, input_dim, block_size)
         model.load_state_dict(checkpoint['model'])
         model = model.to(device)

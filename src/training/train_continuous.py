@@ -227,6 +227,8 @@ def create_model(args, input_dim: int, block_size: int):
         match_cfg = BASELINE_MATCH_CONFIG.get(args.model_type, {})
         n_layer = match_cfg.get('n_layer', args.n_layer)
         n_embd = match_cfg.get('n_embd', n_embd)
+        args.n_layer = n_layer
+        args.n_embd = n_embd
         print(f"\n[MATCH PROPOSED] {args.model_type}: n_layer={n_layer}, n_embd={n_embd}")
         print(f"                 (targeting ~1.79M to match E∆-MHC-Geo)")
     
