@@ -39,14 +39,22 @@ class MixedTRMBlock(nn.Module):
 
         # Attention at d_stream width (per-stream compute)
         d_stream = config.hidden_size // self.n_streams if mixer_type != 'none' else config.hidden_size
-        n_heads = config.num_heads
+
         if mixer_type != 'none':
-            while d_stream % n_heads != 0 and n_heads > 1:
-                n_heads -= 1
+            # IMPORTANT: head_dim must match the parent TRM's RoPE dimension
+            # (hidden_size // num_heads) so cos_sin can be shared.
+            # E.g., hidden=512, parent_heads=8 → parent_head_dim=64
+            # d_stream=128 → n_heads = d_stream // parent_head_dim = 2
+            parent_head_dim = config.hidden_size // config.num_heads
+            n_heads = max(1, d_stream // parent_head_dim)
+            head_dim = parent_head_dim
+        else:
+            n_heads = config.num_heads
+            head_dim = d_stream // n_heads
 
         self.self_attn = Attention(
             hidden_size=d_stream,
-            head_dim=d_stream // n_heads,
+            head_dim=head_dim,
             num_heads=n_heads,
             num_key_value_heads=n_heads,
             causal=False
