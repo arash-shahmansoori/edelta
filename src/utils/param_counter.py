@@ -25,6 +25,7 @@ from src.models.ddl import GPT as DDLGPT, GPTConfig as DDLConfig
 from src.models.mhc import GPT as mHCGPT, GPTConfig as mHCConfig
 from src.models.jpmhc import GPT as JPmHCGPT, GPTConfig as JPmHCConfig
 from src.models.edelta_hybrid import GPT as EdeltaGPT, GPTConfig as EdeltaConfig
+from src.models.edelta_stream import GPT as EdeltaStreamGPT, GPTConfig as EdeltaStreamConfig
 
 
 def count_params(model: nn.Module) -> int:
@@ -51,7 +52,8 @@ def count_params_by_component(model: nn.Module) -> dict:
 
 
 def create_model(model_type: str, n_layer: int, n_head: int, n_embd: int, 
-                 n_streams: int = 4, block_size: int = 64, verbose: bool = False):
+                 n_streams: int = 4, block_size: int = 64, 
+                 geo_hidden_ratio: int = 4, verbose: bool = False):
     """Create a model of the specified type."""
     
     if model_type == 'gpt':
@@ -90,9 +92,18 @@ def create_model(model_type: str, n_layer: int, n_head: int, n_embd: int,
             n_layer=n_layer, n_head=n_head, n_embd=n_embd,
             n_streams=n_streams, dropout=0, bias=False,
             block_size=block_size, vocab_size=1,
-            geo_hidden_ratio=4, use_mhc_projections=True
+            geo_hidden_ratio=geo_hidden_ratio, use_mhc_projections=True
         )
         model = EdeltaGPT(config)
+
+    elif model_type == 'edelta_stream':
+        config = EdeltaStreamConfig(
+            n_layer=n_layer, n_head=n_head, n_embd=n_embd,
+            n_streams=n_streams, dropout=0, bias=False,
+            block_size=block_size, vocab_size=1,
+            geo_hidden_ratio=geo_hidden_ratio
+        )
+        model = EdeltaStreamGPT(config)
         
     else:
         raise ValueError(f"Unknown model_type: {model_type}")

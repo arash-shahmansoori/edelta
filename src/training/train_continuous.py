@@ -52,6 +52,7 @@ from src.models.ddl import GPT as DDLGPT, GPTConfig as DDLConfig
 from src.models.mhc import GPT as mHCGPT, GPTConfig as mHCConfig
 from src.models.jpmhc import GPT as JPmHCGPT, GPTConfig as JPmHCConfig
 from src.models.edelta_hybrid import GPT as EdeltaGPT, GPTConfig as EdeltaConfig
+from src.models.edelta_stream import GPT as EdeltaStreamGPT, GPTConfig as EdeltaStreamConfig
 
 
 class ContinuousModelWrapper(nn.Module):
@@ -137,7 +138,7 @@ def get_args():
     
     # Model
     parser.add_argument('--model_type', type=str, default='gpt2',
-                        choices=['gpt2', 'ddl', 'mhc', 'jpmhc', 'edelta'],
+                        choices=['gpt2', 'ddl', 'mhc', 'jpmhc', 'edelta', 'edelta_stream'],
                         help='Model architecture to train')
     
     # Data
@@ -180,6 +181,8 @@ def get_args():
                         help='Weight for midpoint collapse regularization (0=disabled)')
     parser.add_argument('--init_gate_bias', type=float, default=0.0,
                         help='Initial gate bias (>0=prefer rotation, <0=prefer reflection)')
+    parser.add_argument('--geo_hidden_ratio', type=int, default=4,
+                        help='Geometric operator hidden dim = n_embd // geo_hidden_ratio')
     
     # Fair comparison mode
     parser.add_argument('--match_proposed_params', action='store_true',
@@ -211,7 +214,7 @@ def create_model(args, input_dim: int, block_size: int):
     n_embd = args.n_embd
     n_layer = args.n_layer
     use_mhc_projections = True
-    geo_hidden_ratio = 4  # Default for E∆-MHC-Geo
+    geo_hidden_ratio = args.geo_hidden_ratio
     
     # Map baselines to match E∆-MHC-Geo's param count (~1.79M)
     # JPmHC needs n_embd=512 because its sub-layer F operates at d_stream=n_embd/n_streams
@@ -312,7 +315,26 @@ def create_model(args, input_dim: int, block_size: int):
             geo_hidden_ratio=geo_hidden_ratio,
         )
         core = EdeltaGPT(config)
-        
+
+    elif args.model_type == 'edelta_stream':
+        print(f"\n=== E∆-Stream (Per-Stream Compute Variant) ===")
+        print(f"  init_gate_bias: {args.init_gate_bias}")
+        print(f"  gate_reg_weight: {args.gate_reg_weight}")
+        config = EdeltaStreamConfig(
+            n_layer=n_layer,
+            n_head=args.n_head,
+            n_embd=n_embd,
+            n_streams=args.n_streams,
+            dropout=args.dropout,
+            bias=False,
+            block_size=block_size,
+            vocab_size=1,
+            gate_reg_weight=args.gate_reg_weight,
+            init_gate_bias=args.init_gate_bias,
+            geo_hidden_ratio=geo_hidden_ratio,
+        )
+        core = EdeltaStreamGPT(config)
+
     else:
         raise ValueError(f"Unknown model_type: {args.model_type}")
     
