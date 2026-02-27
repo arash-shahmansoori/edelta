@@ -28,3 +28,9 @@ paper/*.out
 paper/*.log
 paper/*.synctex.gz
 paper/*_annotated.pdf
+
+# ARC-AGI TRM experiment artifacts
+arc_agi_trm/data/
+arc_agi_trm/checkpoints/
+arc_agi_trm/wandb/
+arc_agi_trm/outputs/
