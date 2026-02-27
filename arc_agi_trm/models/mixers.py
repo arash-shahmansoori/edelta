@@ -20,6 +20,7 @@ Usage in TRM Block:
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from models.layers import rms_norm, CastedLinear
 
 
 class JPmHCMixer(nn.Module):
@@ -44,18 +45,17 @@ class JPmHCMixer(nn.Module):
 
         assert hidden_size % n_streams == 0
 
-        self.norm = nn.LayerNorm(hidden_size)
-        self.fused_proj = nn.Linear(hidden_size, 3 * n_streams * n_streams, bias=True)
+        self.fused_proj = CastedLinear(hidden_size, 3 * n_streams * n_streams, bias=True)
 
         with torch.no_grad():
-            nn.init.zeros_(self.fused_proj.weight)
+            self.fused_proj.weight.zero_()
             self.fused_proj.bias.zero_()
 
         self.register_buffer('I', torch.eye(n_streams))
 
     def iterative_cayley(self, H_tilde):
         W = H_tilde - H_tilde.transpose(-1, -2)
-        I = self.I
+        I = self.I.to(W.dtype)
         Y = I + self.cayley_alpha * W
         for _ in range(self.cayley_iters):
             Y = I + (self.cayley_alpha / 2) * torch.matmul(W, I + Y)
@@ -73,8 +73,7 @@ class JPmHCMixer(nn.Module):
         B, T, n, d = x_streams.shape
 
         x_flat = x_streams.reshape(B, T, -1)
-        x_norm = self.norm(x_flat)
-        fused = self.fused_proj(x_norm).view(B, T, 3, n, n)
+        fused = self.fused_proj(rms_norm(x_flat, 1e-5)).view(B, T, 3, n, n)
 
         H_pre = F.softmax(fused[:, :, 0], dim=-1)
         H_post = F.softmax(fused[:, :, 1], dim=-2)
@@ -119,16 +118,14 @@ class EdeltaMixer(nn.Module):
         # Geometric operator: fused projection for Cayley + Householder + gate
         # Outputs: u(n) + v(n) + β(1) + k(d) + γ(1) = 2n + 2 + d
         self.geo_out_dim = 2 * n + 2 + hidden_size
-        self.geo_norm = nn.LayerNorm(hidden_size)
         self.geo_proj = nn.Sequential(
-            nn.Linear(hidden_size, geo_hidden_dim),
+            CastedLinear(hidden_size, geo_hidden_dim, bias=True),
             nn.GELU(),
-            nn.Linear(geo_hidden_dim, self.geo_out_dim),
+            CastedLinear(geo_hidden_dim, self.geo_out_dim, bias=True),
         )
 
         # Dynamic routing (H_pre, H_post)
-        self.route_norm = nn.LayerNorm(hidden_size)
-        self.route_proj = nn.Linear(hidden_size, 2 * n * n, bias=True)
+        self.route_proj = CastedLinear(hidden_size, 2 * n * n, bias=True)
 
         self._init_weights(init_gate_bias)
 
@@ -137,14 +134,13 @@ class EdeltaMixer(nn.Module):
 
     def _init_weights(self, init_gate_bias):
         with torch.no_grad():
-            nn.init.normal_(self.geo_proj[0].weight, std=0.02)
-            nn.init.zeros_(self.geo_proj[0].bias)
-            nn.init.zeros_(self.geo_proj[2].weight)
-            bias = self.geo_proj[2].bias
-            bias[:-1].zero_()
-            bias[-1].fill_(init_gate_bias)
+            self.geo_proj[0].weight.normal_(std=0.02)
+            self.geo_proj[0].bias.zero_()
+            self.geo_proj[2].weight.zero_()
+            self.geo_proj[2].bias[:-1].zero_()
+            self.geo_proj[2].bias[-1].fill_(init_gate_bias)
 
-            nn.init.zeros_(self.route_proj.weight)
+            self.route_proj.weight.zero_()
             self.route_proj.bias.zero_()
 
     def forward(self, x_streams, layer_fn, rms_norm_eps):
@@ -162,8 +158,7 @@ class EdeltaMixer(nn.Module):
         x_flat = x_streams.reshape(B, T, D)
 
         # === Per-token geometric operator ===
-        x_gnorm = self.geo_norm(x_flat)           # (B, T, D)
-        params = self.geo_proj(x_gnorm)            # (B, T, geo_out_dim)
+        params = self.geo_proj(rms_norm(x_flat, 1e-5))  # (B, T, geo_out_dim)
 
         idx = 0
         u = params[:, :, idx:idx+n]; idx += n          # (B, T, n)
@@ -182,14 +177,16 @@ class EdeltaMixer(nn.Module):
         gamma_bc = gamma.unsqueeze(-1)              # (B, T, 1, 1)
 
         # Per-token Cayley rotation on streams (exact, n×n per token)
-        A = torch.einsum('bti,btj->btij', u, v) - torch.einsum('bti,btj->btij', v, u)
-        M = (beta.unsqueeze(-1) / 2) * A           # (B, T, n, n)
+        # Cast to float32 for linalg.solve (not supported in bfloat16)
+        orig_dtype = u.dtype
+        A = torch.einsum('bti,btj->btij', u.float(), v.float()) - torch.einsum('bti,btj->btij', v.float(), u.float())
+        M = (beta.float().unsqueeze(-1) / 2) * A
         I_batch = self.I.expand(B, T, -1, -1)
         BT = B * T
         Q = torch.linalg.solve(
             (I_batch + M).reshape(BT, n, n),
             (I_batch - M).reshape(BT, n, n)
-        ).reshape(B, T, n, n)
+        ).reshape(B, T, n, n).to(orig_dtype)
         x_rotated = torch.einsum('btij,btjd->btid', Q, x_streams)
 
         # Per-token Householder reflection on FULL dimension
@@ -199,8 +196,7 @@ class EdeltaMixer(nn.Module):
         x_geo = gamma_bc * x_rotated + (1 - gamma_bc) * x_reflected
 
         # === Dynamic routing around F ===
-        x_rnorm = self.route_norm(x_geo.reshape(B, T, D))
-        route = self.route_proj(x_rnorm).view(B, T, 2, n, n)
+        route = self.route_proj(rms_norm(x_geo.reshape(B, T, D), 1e-5)).view(B, T, 2, n, n)
         H_pre = F.softmax(route[:, :, 0], dim=-1)
         H_post = F.softmax(route[:, :, 1], dim=-2)
 
