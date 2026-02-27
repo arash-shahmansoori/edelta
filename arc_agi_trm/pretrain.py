@@ -287,9 +287,13 @@ def create_evaluators(config: PretrainConfig, eval_metadata: PuzzleDatasetMetada
     return evaluators
 
 def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, global_batch_size: int, rank: int, world_size: int):
+    import time as _time
+
     train_state.step += 1
     if train_state.step > train_state.total_steps:  # At most train_total_steps
         return
+
+    step_start = _time.monotonic()
 
     # To device
     batch = {k: v.cuda() for k, v in batch.items()}
@@ -309,7 +313,14 @@ def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, glo
         for param in train_state.model.parameters():
             if param.grad is not None:
                 dist.all_reduce(param.grad)
-            
+
+    # Gradient norm (before clipping) — tracks dynamical isometry
+    grad_norm = torch.nn.utils.clip_grad_norm_(
+        train_state.model.parameters(), max_norm=float('inf'))
+
+    # Gradient clipping (matching JPmHC: grad_clip=1.0)
+    torch.nn.utils.clip_grad_norm_(train_state.model.parameters(), max_norm=1.0)
+
     # Apply optimizer
     lr_this_step = None    
     for optim, base_lr in zip(train_state.optimizers, train_state.optimizer_lrs):
@@ -320,6 +331,8 @@ def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, glo
             
         optim.step()
         optim.zero_grad()
+
+    step_time = _time.monotonic() - step_start
 
     # Reduce metrics
     if len(metrics):
@@ -340,6 +353,38 @@ def train_batch(config: PretrainConfig, train_state: TrainState, batch: Any, glo
             reduced_metrics = {f"train/{k}": v / (global_batch_size if k.endswith("loss") else count) for k, v in reduced_metrics.items()}
 
             reduced_metrics["train/lr"] = lr_this_step
+
+            # Extra metrics for comparison study
+            reduced_metrics["train/grad_norm"] = grad_norm.item()
+            reduced_metrics["train/step_time_s"] = step_time
+            reduced_metrics["train/vram_mb"] = torch.cuda.max_memory_allocated() / 1e6 if torch.cuda.is_available() else 0
+
+            # E∆ gate metrics (γ per layer)
+            if hasattr(train_state.model, 'inner'):
+                inner = train_state.model.inner
+                if hasattr(inner, 'L_level'):
+                    for i, layer in enumerate(inner.L_level.layers):
+                        if hasattr(layer, 'attn_mixer') and hasattr(layer.attn_mixer, '_gate_reg_loss'):
+                            if hasattr(layer.attn_mixer, '_gate_reg_loss') and layer.attn_mixer._gate_reg_loss is not None:
+                                gate_attn = getattr(layer.attn_mixer, '_last_gamma', None)
+                                gate_ffn = getattr(layer.ffn_mixer, '_last_gamma', None)
+                                if gate_attn is not None:
+                                    reduced_metrics[f"train/gate_attn_L{i}"] = gate_attn
+                                if gate_ffn is not None:
+                                    reduced_metrics[f"train/gate_ffn_L{i}"] = gate_ffn
+            # Access through ACTLossHead wrapper
+            elif hasattr(train_state.model, 'model') and hasattr(train_state.model.model, 'inner'):
+                inner = train_state.model.model.inner
+                if hasattr(inner, 'L_level'):
+                    for i, layer in enumerate(inner.L_level.layers):
+                        if hasattr(layer, 'mixer_type') and layer.mixer_type == 'edelta':
+                            gate_attn = getattr(layer.attn_mixer, '_last_gamma', None)
+                            gate_ffn = getattr(layer.ffn_mixer, '_last_gamma', None)
+                            if gate_attn is not None:
+                                reduced_metrics[f"train/gate_attn_L{i}"] = gate_attn
+                            if gate_ffn is not None:
+                                reduced_metrics[f"train/gate_ffn_L{i}"] = gate_ffn
+
             return reduced_metrics
 
 def evaluate(
