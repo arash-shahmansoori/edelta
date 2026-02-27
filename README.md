@@ -199,12 +199,107 @@ uv run src/utils/param_counter.py --breakdown edelta --quiet
 
 A per-stream compute variant that combines E∆'s full O(n) geometric operator with JPmHC-style per-stream attention/MLP efficiency. Uses stream-level Cayley rotation + full-dimensional Householder reflection + dynamic routing (H_pre/H_post). Available at `src/models/edelta_stream.py`.
 
+## ARC-AGI Comparison: E∆ vs JPmHC on TRM Backbone
+
+A head-to-head architectural comparison on the [ARC-AGI](https://arcprize.org/) benchmark using the [Tiny Recursive Model (TRM)](https://github.com/SamsungSAILMontreal/TinyRecursiveModels) backbone (~7M params).
+
+**Setup:** Same TRM backbone, same data, same optimizer — only the mixer module differs:
+- **Baseline TRM**: Standard residual connections (no mixer)
+- **TRM + JPmHC**: Iterative Cayley retraction, SO(n) only ([arXiv:2602.18308](https://arxiv.org/abs/2602.18308))
+- **TRM + E∆**: Exact Cayley + Householder + gate, full O(n) (this work)
+
+**Metrics tracked:** Exact-match accuracy, Pass@k (k=1,10,100), convergence curves, gradient norms, per-task gate γ analysis.
+
+### Quick Start
+
+```bash
+cd arc_agi_trm
+
+# 1. Install dependencies
+pip install -r requirements.txt
+pip install --no-cache-dir --no-build-isolation adam-atan2
+
+# 2. Prepare ARC-AGI-1 dataset (training + evaluation + ConceptARC, 1000 augmentations)
+python -m dataset.build_arc_dataset \
+  --input-file-prefix kaggle/combined/arc-agi \
+  --output-dir data/arc1concept-aug-1000 \
+  --subsets training evaluation concept \
+  --test-set-name evaluation
+
+# 3. Run all three variants
+bash scripts/run_arc_comparison.sh all
+
+# Or run individually:
+bash scripts/run_arc_comparison.sh baseline   # Standard TRM
+bash scripts/run_arc_comparison.sh jpmhc      # TRM + JPmHC Cayley
+bash scripts/run_arc_comparison.sh edelta      # TRM + E∆ (Cayley+Householder+gate)
+```
+
+### Multi-GPU Training
+
+```bash
+# Set number of GPUs (default: 1)
+NUM_GPUS=4 bash scripts/run_arc_comparison.sh edelta
+```
+
+### Architecture Details
+
+Both mixers wrap each attention and FFN sub-block in TRM's 2 unique layers:
+
+| Component | Baseline TRM | TRM + JPmHC | TRM + E∆ |
+|-----------|-------------|-------------|----------|
+| Residual | x + F(x) | H_res·x + H_post·F(avg(H_pre·x)) | G_γ(x) + H_post·F(avg(H_pre·x)) |
+| H_res | Identity | Iterative Cayley (α=0.1, s=2) | Exact Cayley + Householder + gate |
+| Orthogonality | None | Approximate (‖Y^TY-I‖<10⁻³) | Exact (Q^TQ=I) |
+| Negation | No | No (SO(n) only) | Yes (full O(n) via γ→0) |
+| F width | hidden_size=512 | d_stream=128 | d_stream=128 |
+| Routing | None | Per-token fused Linear | Per-token fused MLP + routing |
+
+### Config Options (via hydra overrides)
+
+```bash
+# Change mixer type
+python pretrain.py arch=trm arch.mixer_type=edelta
+
+# Adjust E∆ parameters
+python pretrain.py arch=trm arch.mixer_type=edelta \
+  arch.gate_reg_weight=0.1 arch.init_gate_bias=0.0 arch.geo_hidden_dim=48
+
+# Adjust JPmHC parameters
+python pretrain.py arch=trm arch.mixer_type=jpmhc \
+  arch.cayley_alpha=0.1 arch.cayley_iters=2
+
+# Change stream count
+python pretrain.py arch=trm arch.mixer_type=edelta arch.n_streams=4
+```
+
+### Expected Compute
+
+| Hardware | Estimated Runtime |
+|----------|------------------|
+| 1× A100 (80GB) | ~6-8 days per variant |
+| 4× H100 | ~3 days per variant |
+| 1× L40S (48GB) | ~10-14 days per variant |
+
+### Files Modified from TRM Base
+
+| File | Change |
+|------|--------|
+| `models/mixers.py` | JPmHCMixer + EdeltaMixer (new) |
+| `models/recursive_reasoning/trm.py` | Block accepts mixer_type, per-stream F |
+| `models/losses.py` | Gate reg loss for E∆ |
+| `config/arch/trm.yaml` | Mixer config options |
+| `scripts/run_arc_comparison.sh` | Run script (new) |
+
+---
+
 ## References
 
 - **E∆-MHC-Geo**: This work
 - **DDL**: [arXiv:2406.17550](https://arxiv.org/abs/2406.17550)
 - **mHC**: [arXiv:2512.24880](https://arxiv.org/abs/2512.24880)
 - **JPmHC**: [arXiv:2602.18308](https://arxiv.org/abs/2602.18308) — Sengupta, Wang & Brunswic (2026)
+- **TRM**: [arXiv:2510.04871](https://arxiv.org/abs/2510.04871) — Jolicoeur-Martineau (2025)
 - **"Illusion of Insight"**: [arXiv:2601.00514](https://arxiv.org/abs/2601.00514)
 
 ## License
