@@ -177,6 +177,7 @@ class EdeltaMixer(nn.Module):
 
         self._gate_reg_loss = self.gate_reg_weight * 4 * gamma * (1 - gamma)
         self._gate_reg_loss = self._gate_reg_loss.mean()
+        self._last_gamma = gamma.detach().mean()
 
         gamma_bc = gamma.unsqueeze(-1)              # (B, T, 1, 1)
 

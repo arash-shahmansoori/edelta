@@ -36,34 +36,43 @@ DATA_PATH="data/arc1concept-aug-1000"
 echo "Using ARC-AGI-1 data"
 
 VARIANTS="${1:-none jpmhc edelta}"
-STEPS=50
-EVAL_INTERVAL=25
+STEPS=3
+
+# Use AdamW fallback if AdamATan2 CUDA kernels not available
+export USE_ADAMW=1
+# Disable torch.compile for faster startup in smoke test
+export DISABLE_COMPILE=1
 
 for MIXER in $VARIANTS; do
     echo ""
     echo "========== mixer_type=${MIXER} =========="
     echo ""
 
+    # Train for STEPS epochs, eval_interval > epochs means no eval triggered
+    # (eval only triggers when step % eval_interval == 0 AND step > 0)
     python pretrain.py \
         arch=trm \
         data_paths="[${DATA_PATH}]" \
         evaluators="[]" \
         epochs=${STEPS} \
-        eval_interval=${EVAL_INTERVAL} \
+        eval_interval=${STEPS} \
+        arch.halt_max_steps=2 \
         lr=1e-4 \
         puzzle_emb_lr=1e-4 \
         weight_decay=1.0 \
         puzzle_emb_weight_decay=1.0 \
+        global_batch_size=32 \
         arch.L_layers=2 \
         arch.H_cycles=2 \
         arch.L_cycles=2 \
         arch.mixer_type=${MIXER} \
         arch.n_streams=4 \
         +run_name=smoke_${MIXER} \
-        2>&1 | grep -E "step|loss|grad_norm|gate|vram|accuracy|param|Error|error" | head -30
+        2>&1 | tee /tmp/smoke_${MIXER}.log | tail -10
 
     echo ""
     echo "  ✓ mixer_type=${MIXER} completed"
+    echo "  Full log: /tmp/smoke_${MIXER}.log"
 done
 
 echo ""

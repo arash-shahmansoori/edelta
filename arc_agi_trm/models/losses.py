@@ -98,8 +98,7 @@ class ACTLossHead(nn.Module):
             metrics["q_continue_loss"] = q_continue_loss.detach()
         # E∆ gate regularization loss
         gate_reg_loss = outputs.get("gate_reg_loss", torch.tensor(0.0, device=lm_loss.device))
-        if gate_reg_loss.item() > 0:
-            metrics["gate_reg_loss"] = gate_reg_loss.detach()
+        metrics["gate_reg_loss"] = gate_reg_loss.detach()
 
         # Filter outputs for return
         detached_outputs = {k: outputs[k].detach() for k in return_keys if k in outputs}

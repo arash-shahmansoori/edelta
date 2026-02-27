@@ -17,7 +17,17 @@ import coolname
 import hydra
 import pydantic
 from omegaconf import DictConfig
-from adam_atan2 import AdamATan2
+try:
+    from adam_atan2 import AdamATan2
+    _HAS_ADAM_ATAN2 = True
+except Exception:
+    _HAS_ADAM_ATAN2 = False
+
+def get_optimizer_cls():
+    if _HAS_ADAM_ATAN2 and "USE_ADAMW" not in os.environ:
+        return AdamATan2
+    print("WARNING: Using AdamW fallback (set USE_ADAMW=1 or adam-atan2 unavailable)")
+    return torch.optim.AdamW
 
 from puzzle_dataset import PuzzleDataset, PuzzleDatasetConfig, PuzzleDatasetMetadata
 from utils.functions import load_model_class, get_model_source_path
@@ -145,9 +155,10 @@ def create_model(config: PretrainConfig, train_metadata: PuzzleDatasetMetadata, 
                     dist.broadcast(param, src=0)
 
     # Optimizers and lr
+    OptimCls = get_optimizer_cls()
     if config.arch.puzzle_emb_ndim == 0:
         optimizers = [
-            AdamATan2(
+            OptimCls(
                 model.parameters(),
                 lr=0,  # Needs to be set by scheduler
                 weight_decay=config.weight_decay,
@@ -177,7 +188,7 @@ def create_model(config: PretrainConfig, train_metadata: PuzzleDatasetMetadata, 
                 weight_decay=config.puzzle_emb_weight_decay,
                 world_size=world_size
             ),
-            AdamATan2(
+            OptimCls(
                 model.parameters(),
                 lr=0,  # Needs to be set by scheduler
                 weight_decay=config.weight_decay,
