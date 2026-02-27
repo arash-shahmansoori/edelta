@@ -161,37 +161,39 @@ class EdeltaMixer(nn.Module):
 
         x_flat = x_streams.reshape(B, T, D)
 
-        # === Geometric operator ===
-        x_pooled = x_flat.mean(dim=1)  # (B, D)
-        x_gnorm = self.geo_norm(x_pooled)
-        params = self.geo_proj(x_gnorm)  # (B, geo_out_dim)
+        # === Per-token geometric operator ===
+        x_gnorm = self.geo_norm(x_flat)           # (B, T, D)
+        params = self.geo_proj(x_gnorm)            # (B, T, geo_out_dim)
 
         idx = 0
-        u = params[:, idx:idx+n]; idx += n
-        v = params[:, idx:idx+n]; idx += n
-        beta = F.softplus(params[:, idx:idx+1]); idx += 1
-        k_raw = params[:, idx:idx+D]; idx += D
-        gate_logit = params[:, idx:idx+1]
+        u = params[:, :, idx:idx+n]; idx += n          # (B, T, n)
+        v = params[:, :, idx:idx+n]; idx += n          # (B, T, n)
+        beta = F.softplus(params[:, :, idx:idx+1]); idx += 1  # (B, T, 1)
+        k_raw = params[:, :, idx:idx+D]; idx += D      # (B, T, D)
+        gate_logit = params[:, :, idx:idx+1]            # (B, T, 1)
 
-        k = F.normalize(k_raw + 1e-8, dim=-1)
-        gamma = torch.sigmoid(gate_logit)
+        k = F.normalize(k_raw + 1e-8, dim=-1)     # (B, T, D)
+        gamma = torch.sigmoid(gate_logit)           # (B, T, 1)
 
         self._gate_reg_loss = self.gate_reg_weight * 4 * gamma * (1 - gamma)
         self._gate_reg_loss = self._gate_reg_loss.mean()
 
-        gamma_bc = gamma.view(B, 1, 1, 1)
+        gamma_bc = gamma.unsqueeze(-1)              # (B, T, 1, 1)
 
-        # Cayley rotation on streams (exact, n×n)
-        A = torch.einsum('bi,bj->bij', u, v) - torch.einsum('bi,bj->bij', v, u)
-        M = (beta.view(B, 1, 1) / 2) * A
-        I_batch = self.I.unsqueeze(0).expand(B, -1, -1)
-        Q = torch.linalg.solve(I_batch + M, I_batch - M)
-        x_rotated = torch.einsum('bnm,btmd->btnd', Q, x_streams)
+        # Per-token Cayley rotation on streams (exact, n×n per token)
+        A = torch.einsum('bti,btj->btij', u, v) - torch.einsum('bti,btj->btij', v, u)
+        M = (beta.unsqueeze(-1) / 2) * A           # (B, T, n, n)
+        I_batch = self.I.expand(B, T, -1, -1)
+        BT = B * T
+        Q = torch.linalg.solve(
+            (I_batch + M).reshape(BT, n, n),
+            (I_batch - M).reshape(BT, n, n)
+        ).reshape(B, T, n, n)
+        x_rotated = torch.einsum('btij,btjd->btid', Q, x_streams)
 
-        # Householder reflection on FULL dimension
-        k_dot_x = (k.unsqueeze(1) * x_flat).sum(dim=-1, keepdim=True)  # (B, T, 1)
-        x_reflected = x_flat - 2 * k_dot_x * k.unsqueeze(1)  # (B, T, D)
-        x_reflected = x_reflected.reshape(B, T, n, d)
+        # Per-token Householder reflection on FULL dimension
+        k_dot_x = (k * x_flat).sum(dim=-1, keepdim=True)  # (B, T, 1)
+        x_reflected = (x_flat - 2 * k_dot_x * k).reshape(B, T, n, d)
 
         x_geo = gamma_bc * x_rotated + (1 - gamma_bc) * x_reflected
 
