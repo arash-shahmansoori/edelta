@@ -23,17 +23,17 @@ echo "============================================================"
 echo "SMOKE TEST: Verifying all mixer variants"
 echo "============================================================"
 
-# Check if data exists, if not use Sudoku (faster to generate)
-if [ -d "data/arc1concept-aug-1000" ]; then
-    DATA_PATH="data/arc1concept-aug-1000"
-    echo "Using ARC-AGI-1 data"
-else
-    echo "ARC-AGI data not found. Generating Sudoku data for smoke test..."
-    python dataset/build_sudoku_dataset.py \
-        --output-dir data/sudoku-smoke \
-        --subsample-size 100 --num-aug 10
-    DATA_PATH="data/sudoku-smoke"
+# Prepare ARC-AGI data if not present
+if [ ! -d "data/arc1concept-aug-1000" ]; then
+    echo "Preparing ARC-AGI-1 dataset..."
+    python -m dataset.build_arc_dataset \
+        --input-file-prefix kaggle/combined/arc-agi \
+        --output-dir data/arc1concept-aug-1000 \
+        --subsets training evaluation concept \
+        --test-set-name evaluation
 fi
+DATA_PATH="data/arc1concept-aug-1000"
+echo "Using ARC-AGI-1 data"
 
 VARIANTS="${1:-none jpmhc edelta}"
 STEPS=50
