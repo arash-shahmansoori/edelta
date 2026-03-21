@@ -11,7 +11,7 @@ det=+1). This creates a "blind spot" - they cannot perform unitary erasure or ne
 E∆-MHC-Geo achieves FULL O(n) coverage:
   - Cayley Rotation (SO(n), det=+1): Geometric reasoning, continuous transforms
   - Householder Reflection (det=-1): Negation, correction, "changing one's mind"
-  - Thermodynamic Gating: Entropy-aware switching between the two components
+  - Learned Operator Gate: Task-adaptive switching between the two components
 
 === MATHEMATICAL FOUNDATION (from RESEARCH.md) ===
 
@@ -85,7 +85,7 @@ class EdeltaMHCGeoHybrid(nn.Module):
     Where:
     - Q(X) ∈ SO(n): Data-Dependent Cayley rotation (Theorem 1: unconditionally orthogonal)
     - H₂(k(X)) = I - 2·k·kᵀ: Householder reflection with β=2 FIXED (Theorem 7)
-    - γ(X) ∈ (0,1): Thermodynamic gate (entropy-aware)
+    - γ(X) ∈ (0,1): Learned operator-selection gate
     
     === CRITICAL THEORETICAL CONSTRAINTS ===
     
@@ -163,8 +163,8 @@ class EdeltaMHCGeoHybrid(nn.Module):
         # β = 2 is the ONLY value achieving both orthogonality AND negation
         self.register_buffer('householder_beta', torch.tensor(2.0))
         
-        # === THERMODYNAMIC GATE ===
-        # γ(x) = σ(W_γ · x̄ + b_γ) modulated by entropy
+        # === LEARNED OPERATOR GATE ===
+        # γ(x) = σ(W_γ · x̄ + b_γ)
         self.gate_net = nn.Linear(d_model, 1, bias=True)
         self.gate_net._is_gate_net = True  # Mark to skip global init
         nn.init.zeros_(self.gate_net.weight)
@@ -175,43 +175,6 @@ class EdeltaMHCGeoHybrid(nn.Module):
         
         # Storage for regularization loss
         self._gate_reg_loss = None
-    
-    def compute_entropy_proxy(self, x_streams: torch.Tensor) -> torch.Tensor:
-        """
-        Compute the Frobenius Purity Proxy as entropy measure.
-        
-        Mathematical basis (from thermodynamic gating theory):
-            φ = 1 - ||G||²_F / tr(G)²
-        where G = X @ X.T is the Gram matrix of streams.
-        
-        Interpretation:
-        - High purity (φ→0) = Low entropy = Certainty → Preserve representation
-        - Low purity (φ→1) = High entropy = Confusion → Allow restructuring
-        
-        Args:
-            x_streams: (B, S, n, d) - input organized into n streams
-            
-        Returns:
-            entropy_proxy: (B, 1, 1, 1) - entropy score per batch
-        """
-        # Gram matrix: G[i,j] = <stream_i, stream_j>
-        G = torch.matmul(x_streams, x_streams.transpose(-1, -2))  # (B, S, n, n)
-        
-        # ||G||²_F = Σᵢⱼ G²ᵢⱼ
-        frob_sq = torch.sum(G ** 2, dim=(-1, -2), keepdim=True)  # (B, S, 1, 1)
-        
-        # tr(G)² = (Σᵢ Gᵢᵢ)²
-        trace = torch.diagonal(G, dim1=-2, dim2=-1).sum(-1, keepdim=True)  # (B, S, 1)
-        trace_sq = trace.unsqueeze(-1) ** 2 + 1e-8  # (B, S, 1, 1)
-        
-        # Purity = ||G||²_F / tr(G)² (high when streams similar)
-        purity = frob_sq / trace_sq
-        
-        # Entropy proxy = 1 - purity (high when streams diverse/confused)
-        entropy_proxy = 1.0 - purity
-        
-        # Average across sequence for global entropy signal
-        return entropy_proxy.mean(dim=1, keepdim=True)  # (B, 1, 1, 1)
     
     def data_dependent_cayley(
         self, 
@@ -328,16 +291,13 @@ class EdeltaMHCGeoHybrid(nn.Module):
         return_debug: bool = False
     ) -> torch.Tensor | Tuple[torch.Tensor, Dict[str, Any]]:
         """
-        Forward pass: DDC-Hybrid with thermodynamic gating (Definition 5.2).
+        Forward pass: DDC-Hybrid with a learned operator-selection gate.
         
         Computes:
             G_γ(X) = γ(X)·Q(X)·X + (1-γ(X))·H₂(k(X))·X
         
-        Where γ is modulated by signal entropy (thermodynamic principle):
-            γ = σ(gate_logit * (1 + φ))
-        
-        High entropy (confusion) → gate can open → allow restructuring
-        Low entropy (certainty) → gate restricted → preserve representation
+        Gate definition:
+            γ = σ(gate_logit)
         
         Args:
             x: (B, S, D) - input tensor
@@ -355,15 +315,10 @@ class EdeltaMHCGeoHybrid(nn.Module):
         # Pool input for parameter computation: x̄ = mean(x)
         x_pooled = x.mean(dim=1)  # (B, D)
         
-        # === THERMODYNAMIC STATE ===
-        entropy_proxy = self.compute_entropy_proxy(x_streams)  # (B, 1, 1, 1)
-        phi = entropy_proxy.view(B, 1)  # (B, 1)
-        
-        # === THERMODYNAMIC GATE ===
-        # γ = σ(gate_logit * (1 + φ))
-        # Higher entropy allows gate to open more
+        # === LEARNED OPERATOR GATE ===
+        # γ = σ(gate_logit)
         gate_logit = self.gate_net(x_pooled)  # (B, 1)
-        gamma = torch.sigmoid(gate_logit * (1.0 + phi))  # (B, 1)
+        gamma = torch.sigmoid(gate_logit)  # (B, 1)
         gamma_broadcast = gamma.view(B, 1, 1, 1)
         
         # === MIDPOINT COLLAPSE REGULARIZATION ===
@@ -395,7 +350,6 @@ class EdeltaMHCGeoHybrid(nn.Module):
         if return_debug:
             return x_out, {
                 'gamma': gamma.mean().item(),
-                'entropy_proxy': phi.mean().item(),
                 'gate_logit': gate_logit.mean().item(),
                 'gate_reg_loss': self._gate_reg_loss.item(),
             }
@@ -510,7 +464,7 @@ class Block(nn.Module):
     Components (matching RESEARCH.md Section 7.3):
     1. Data-dependent Cayley rotation (replaces mHC's doubly stochastic H_res)
     2. Householder reflection with β=2 FIXED (for negation capability)
-    3. Thermodynamic gating (entropy-aware switching)
+    3. Learned operator-selection gating
     4. mHC pre/post projections (identity-initialized)
     """
     

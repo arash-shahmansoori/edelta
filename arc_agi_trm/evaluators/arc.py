@@ -105,13 +105,17 @@ class ARC:
             self._local_preds[orig_name][input_hash].append((pred_hash, float(q)))
     
     def result(self, save_path: Optional[str], rank: int, world_size: int, group: Optional[torch.distributed.ProcessGroup] = None) -> Optional[Dict[str, float]]:
-        # Gather predictions to rank 0 for voting
-        global_hmap_preds = [None for _ in range(world_size)] if rank == 0 else None
-        dist.gather_object((self._local_hmap, self._local_preds), global_hmap_preds, dst=0, group=group)
-        
-        # Rank 0 logic
-        if rank != 0:
-            return
+        distributed_eval = world_size > 1 and dist.is_available() and dist.is_initialized()
+        if distributed_eval:
+            # Gather predictions to rank 0 for voting
+            global_hmap_preds = [None for _ in range(world_size)] if rank == 0 else None
+            dist.gather_object((self._local_hmap, self._local_preds), global_hmap_preds, dst=0, group=group)
+            if rank != 0:
+                return
+        else:
+            if rank != 0:
+                return
+            global_hmap_preds = [(self._local_hmap, self._local_preds)]
 
         submission = {}
         correct = [0.0 for _ in range(len(self.pass_Ks))]

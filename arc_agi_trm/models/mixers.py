@@ -212,5 +212,5 @@ class EdeltaMixer(nn.Module):
 
     def get_gate_regularization_loss(self):
         if self._gate_reg_loss is None:
-            return torch.tensor(0.0)
+            return self.geo_proj[2].bias.new_zeros(())
         return self._gate_reg_loss

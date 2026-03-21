@@ -175,7 +175,10 @@ class TinyRecursiveReasoningModel_ACTV1Block(nn.Module):
         if self.mixer_type == "edelta":
             return (self.attn_mixer.get_gate_regularization_loss() +
                     self.ffn_mixer.get_gate_regularization_loss())
-        return torch.tensor(0.0)
+        ref_param = next(self.parameters(), None)
+        if ref_param is None:
+            return torch.tensor(0.0)
+        return ref_param.new_zeros(())
 
 class TinyRecursiveReasoningModel_ACTV1ReasoningModule(nn.Module):
     def __init__(self, layers: List[TinyRecursiveReasoningModel_ACTV1Block]):
@@ -295,7 +298,7 @@ class TinyRecursiveReasoningModel_ACTV1_Inner(nn.Module):
         q_logits = self.q_head(z_H[:, 0]).to(torch.float32) # Q-head; uses the first puzzle_emb position
 
         # Collect gate regularization from E∆ mixer blocks
-        gate_reg = torch.tensor(0.0, device=output.device)
+        gate_reg = output.new_zeros(())
         for layer in self.L_level.layers:
             gate_reg = gate_reg + layer.get_gate_regularization_loss()
 
