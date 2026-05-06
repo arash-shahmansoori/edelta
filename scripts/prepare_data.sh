@@ -40,11 +40,11 @@ prepare_near_pi() {
     echo "Single-plane (θ=177.6°, d=64, seq=128)"
     uv run src/data/near_pi_rotation.py \
         --output_dir data/near_pi_rotation \
-        --rotation_mode single_plane --seed 42
+        --rotation_mode single_plane --theta 3.10 --seed 42
     echo "Multi-plane (θ=179.9°, d=64, seq=128)"
     uv run src/data/near_pi_rotation.py \
         --output_dir data/near_pi_rotation_multiplane \
-        --rotation_mode multi_plane --seed 42
+        --rotation_mode multi_plane --theta 3.14 --seed 42
     echo "Done: data/near_pi_rotation/ and data/near_pi_rotation_multiplane/"
 }
 

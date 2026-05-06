@@ -1,6 +1,6 @@
 # E∆-MHC-Geo: Geodesic Manifold-Delta Transformer
 
-A topologically complete transformer architecture operating on the full Orthogonal Group O(n), featuring input-adaptive, unconditionally orthogonal residual connections via the Data-Dependent Cayley transform.
+A hybrid geometric transformer architecture with input-adaptive, unconditionally orthogonal Cayley residual connections and a Householder reflection branch for boundary access to both connected components of O(n).
 
 ## Key Results (mean ± std, 3 seeds, ~1.79M params each)
 
@@ -20,16 +20,16 @@ E∆ achieves **3.7x improvement** over GPT on gyroscope with **33% fewer layers
 | GPT | 9 | 128 | — | 1.780M | Baseline |
 | DDL | 8 | 128 | — | 1.784M | [arXiv:2406.17550](https://arxiv.org/abs/2406.17550) |
 | mHC | 9 | 128 | 32 | 1.838M | [arXiv:2512.24880](https://arxiv.org/abs/2512.24880) |
-| JPmHC | 7 | 512 | 128 | 1.771M | [arXiv:2602.18308](https://arxiv.org/abs/2602.18308) |
+| JPmHC | 7 | 512 | 128 | 1.771M | [arXiv:2602.18308v2](https://arxiv.org/abs/2602.18308v2) |
 | **E∆** | **6** | 128 | 32 | **1.788M** | This work |
 
 ### Reflection (Negation y = -x)
 
 | Model | 500 samples | Capability |
 |-------|------------|------------|
-| DDL | β→1.995, acc=0.96 | Householder only |
-| JPmHC | acc=-0.30 | **Fails** (SO(n)-only) |
-| **E∆** | γ→0.051, **acc=0.96** | Full O(n) via gate |
+| DDL | β→1.995, align=0.96 | Householder only |
+| JPmHC | align=-0.30 | Fails in finite-Cayley diagnostic |
+| **E∆** | γ→0.051, **align=0.96** | Cayley + Householder gate |
 
 ### Near-π Rotation
 
@@ -146,7 +146,7 @@ uv run src/training/train_continuous.py \
     --model_type jpmhc --dataset gyroscope \
     --out_dir out-matched/gyroscope-jpmhc --match_proposed_params
 
-# E∆-Stream variant (per-stream F + full O(n) geometric operator)
+# E∆-Stream variant (per-stream F + hybrid geometric operator)
 uv run src/training/train_continuous.py \
     --model_type edelta_stream --dataset gyroscope \
     --n_embd 512 --n_layer 6 --geo_hidden_dim 48 \
@@ -191,13 +191,13 @@ uv run src/utils/param_counter.py --breakdown edelta --quiet
 | GPT | x + F(x) | None | No |
 | DDL | (I - β·kk^T)·x | Only at β=2 | At β=2 |
 | mHC | Sinkhorn·x + F(x) | Approximate | No |
-| JPmHC | Cayley(x)·x + F(x) | Approximate (iterative) | No (SO(n) only) |
+| JPmHC | Cayley(x)·x + F(x) | Approximate (iterative) | No direct reflection branch |
 | **E∆** | **γ·Cayley(x)·x + (1-γ)·H₂(x)·x** | **Exact** | **Yes** (via gate) |
 | E∆-Stream | Same operator, per-stream F | Exact | Yes |
 
 ### E∆-Stream
 
-A per-stream compute variant that combines E∆'s full O(n) geometric operator with JPmHC-style per-stream attention/MLP efficiency. Uses stream-level Cayley rotation + full-dimensional Householder reflection + dynamic routing (H_pre/H_post). Available at `src/models/edelta_stream.py`.
+A per-stream compute variant that combines E∆'s hybrid geometric operator with JPmHC-style per-stream attention/MLP efficiency. Uses stream-level Cayley rotation, stream-axis Householder reflection, and dynamic routing (H_pre/H_post). Available at `src/models/edelta_stream.py`.
 
 ## ARC-AGI Comparison: E∆ vs JPmHC on TRM Backbone
 
@@ -205,8 +205,8 @@ A head-to-head architectural comparison on the [ARC-AGI](https://arcprize.org/) 
 
 **Setup:** Same TRM backbone, same data, same optimizer — only the mixer module differs:
 - **Baseline TRM**: Standard residual connections (no mixer)
-- **TRM + JPmHC**: Iterative Cayley retraction, SO(n) only ([arXiv:2602.18308](https://arxiv.org/abs/2602.18308))
-- **TRM + E∆**: Exact Cayley + Householder + gate, full O(n) (this work)
+- **TRM + JPmHC**: Iterative Cayley retraction, finite Cayley residual mixer ([arXiv:2602.18308v2](https://arxiv.org/abs/2602.18308v2), March 2026)
+- **TRM + E∆**: Exact Cayley + Householder + gate (this work)
 
 **Metrics tracked:** Exact-match accuracy, Pass@k (k=1,10,100), convergence curves, gradient norms, per-task gate γ analysis.
 
@@ -251,7 +251,7 @@ Both mixers wrap each attention and FFN sub-block in TRM's 2 unique layers:
 | Residual | x + F(x) | H_res·x + H_post·F(avg(H_pre·x)) | G_γ(x) + H_post·F(avg(H_pre·x)) |
 | H_res | Identity | Iterative Cayley (α=0.1, s=2) | Exact Cayley + Householder + gate |
 | Orthogonality | None | Approximate (‖Y^TY-I‖<10⁻³) | Exact (Q^TQ=I) |
-| Negation | No | No (SO(n) only) | Yes (full O(n) via γ→0) |
+| Negation | No | No direct reflection branch | Yes (Householder via γ→0) |
 | F width | hidden_size=512 | d_stream=128 | d_stream=128 |
 | Routing | None | Per-token fused Linear | Per-token fused MLP + routing |
 
@@ -298,7 +298,7 @@ python pretrain.py arch=trm arch.mixer_type=edelta arch.n_streams=4
 - **E∆-MHC-Geo**: This work
 - **DDL**: [arXiv:2406.17550](https://arxiv.org/abs/2406.17550)
 - **mHC**: [arXiv:2512.24880](https://arxiv.org/abs/2512.24880)
-- **JPmHC**: [arXiv:2602.18308](https://arxiv.org/abs/2602.18308) — Sengupta, Wang & Brunswic (2026)
+- **JPmHC**: [arXiv:2602.18308v2](https://arxiv.org/abs/2602.18308v2) — Biswa Sengupta, Jinhua Wang & Leo Brunswic (updated March 4, 2026)
 - **TRM**: [arXiv:2510.04871](https://arxiv.org/abs/2510.04871) — Jolicoeur-Martineau (2025)
 - **"Illusion of Insight"**: [arXiv:2601.00514](https://arxiv.org/abs/2601.00514)
 

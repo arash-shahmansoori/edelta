@@ -26,7 +26,7 @@ puzzle_emb_len: 16 # if non-zero, its specified to this value
 no_ACT_continue: True # No continue ACT loss, only use the sigmoid of the halt which makes much more sense
 
 # Mixer config for E∆ vs JPmHC comparison
-# "none" = standard TRM, "jpmhc" = JPmHC Cayley, "edelta" = E∆ full O(n)
+# "none" = standard TRM, "jpmhc" = JPmHC Cayley, "edelta" = E∆ Cayley+Householder
 mixer_type: none
 n_streams: 4
 cayley_alpha: 0.1

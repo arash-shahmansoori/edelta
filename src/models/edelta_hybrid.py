@@ -1,14 +1,17 @@
 """
 E∆-MHC-Geo Hybrid: Geodesic Manifold-Delta Transformer with Topological Completeness
 
-This framework implements the ONLY theoretically sound approach for geometric transformers:
-Data-dependent geodesic operations that span the FULL Orthogonal Group O(n).
+This framework implements data-dependent geometric operations for transformer
+residual paths.  It combines exact Cayley rotations with a Householder
+reflection branch so the model can select operators from both connected
+components of O(n) at the gate boundaries.
 
 === TOPOLOGICAL COMPLETENESS ===
-Standard transformers and even Cayley-only approaches operate strictly on SO(n) (rotations,
-det=+1). This creates a "blind spot" - they cannot perform unitary erasure or negation.
+Finite Cayley-only residual approaches operate within the Cayley image of
+the det=+1 component. This creates a blind spot for direct reflection-like
+updates with exact eigenvalue -1 in the residual path.
 
-E∆-MHC-Geo achieves FULL O(n) coverage:
+E∆-MHC-Geo provides boundary access to both O(n) components:
   - Cayley Rotation (SO(n), det=+1): Geometric reasoning, continuous transforms
   - Householder Reflection (det=-1): Negation, correction, "changing one's mind"
   - Learned Operator Gate: Task-adaptive switching between the two components
@@ -39,7 +42,8 @@ E∆-MHC-Geo achieves FULL O(n) coverage:
 3. DDC-Hybrid Operator (Definition 5.2):
    G_γ(X) = γ·Q(X)·X + (1-γ)·H₂(k(X))·X
    
-   Combines rotation (SO(n)) and reflection (det=-1) for full O(n) coverage.
+   Combines rotation (SO(n)) and reflection (det=-1).  The blended operator is
+   exactly orthogonal only at the gate boundaries γ∈{0,1}.
 
 4. Full Layer Transition with mHC (Section 7.4):
    X_{l+1} = G_γ(X_l) + H_postᵀ·F(H_pre·LN(G_γ(X_l)))
@@ -457,8 +461,8 @@ class Block(nn.Module):
     
     Where:
     - G_γ(X) = γ·Q(X)·X + (1-γ)·H₂(k(X))·X  (DDC-Hybrid operator)
-    - H_pre: Pre-mapping that aggregates streams before F
-    - H_post: Post-mapping that broadcasts F output back to streams
+    - H_pre: Learned full-dimensional pre-projection before F
+    - H_post: Learned full-dimensional post-projection after F
     - F: Layer function (attention or MLP)
     
     Components (matching RESEARCH.md Section 7.3):
@@ -501,9 +505,9 @@ class Block(nn.Module):
             geo_hidden_ratio=geo_hidden_ratio
         )
         
-        # === mHC Pre/Post Mappings (RESEARCH.md Section 7.2) ===
-        # H_pre: Aggregates streams before layer function
-        # H_post: Broadcasts layer output back to streams
+        # === mHC-Inspired Pre/Post Mappings ===
+        # Main reported model: full-dimensional identity-initialized projections.
+        # Strict stream aggregation/broadcast is implemented in edelta_stream.py.
         # Can be disabled for fair parameter comparison (use_mhc_projections=False)
         
         self.use_mhc_projections = getattr(config, 'use_mhc_projections', True)
@@ -612,7 +616,8 @@ class GPT(nn.Module):
     """
     E∆-MHC-Geo GPT: Geodesic Manifold-Delta Transformer
     
-    A topologically complete transformer operating on the full Orthogonal Group O(n).
+    A hybrid geometric transformer with boundary access to both connected
+    components of O(n).
     
     === THEORETICAL FOUNDATION (RESEARCH.md) ===
     

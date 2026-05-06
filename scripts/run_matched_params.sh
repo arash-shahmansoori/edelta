@@ -9,7 +9,7 @@
 #   JPmHC:      n_layer=7, n_embd=512  → 1.771M (0.991x)
 #
 # JPmHC uses n_embd=512 because its sub-layer F operates at d_stream=128
-# (per arXiv:2602.18308 Section 3.2), requiring wider embedding.
+# (per arXiv:2602.18308v2 Section 3.2), requiring wider embedding.
 #
 # Usage:
 #   bash scripts/run_matched_params.sh              # All models, seed 42

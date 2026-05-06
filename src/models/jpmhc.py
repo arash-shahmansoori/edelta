@@ -1,6 +1,8 @@
 """
-JPmHC Implementation (JP Morgan Hyper-Connections with Cayley Retraction)
-Reference: Sengupta, Wang & Brunswic, arXiv:2602.18308, February 2026
+JPmHC Implementation (Jacobian-spectrum Preserving manifold-constrained
+Hyper-Connections with Cayley Retraction)
+Reference: Sengupta, Wang & Brunswic, "JPmHC Dynamical Isometry via
+Orthogonal Hyper-Connections", arXiv:2602.18308v2, March 2026
 
 Faithful to the paper's architecture:
 
@@ -29,7 +31,7 @@ Key differences from E∆-MHC-Geo:
     - Parallel routing (vs series pre-transformation)
     - Full-rank Cayley generator (vs rank-2)
     - Iterative approximation (vs exact analytical solve)
-    - SO(n) only (vs full O(n) with Householder gate)
+    - finite Cayley rotation component only (vs Cayley + Householder gate)
     - Per-token dynamic pre/post (vs learned weight matrices)
     - Sub-layer F on single stream d (vs full n_embd)
 """
@@ -355,9 +357,10 @@ class GPTConfig:
 
 class GPT(nn.Module):
     """
-    GPT with JPmHC (JP Morgan Hyper-Connections with Cayley Retraction).
+    GPT with JPmHC (Jacobian-spectrum Preserving manifold-constrained
+    Hyper-Connections).
 
-    Reference: Sengupta, Wang & Brunswic, arXiv:2602.18308
+    Reference: Sengupta, Wang & Brunswic, arXiv:2602.18308v2
 
     Faithful to the paper's architecture:
     1. Per-token dynamic generation of all mixing matrices (Eq. 12)
@@ -368,7 +371,7 @@ class GPT(nn.Module):
 
     Limitations vs E∆-MHC-Geo:
     - Approximate orthogonality (||Y^T Y - I|| < 10^{-3})
-    - SO(n) only (no reflection, no eigenvalue -1)
+    - finite Cayley component only (no direct reflection branch)
     - Parallel routing (not series pre-transformation)
     """
 

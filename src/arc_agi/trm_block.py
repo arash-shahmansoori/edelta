@@ -7,8 +7,8 @@ and FFN), replacing the standard identity residual with orthogonal mixing.
 
 Three modes:
 - 'none': Standard TRM (no mixer, original architecture)
-- 'jpmhc': JPmHC mixer (iterative Cayley, SO(n) only)
-- 'edelta': E∆ mixer (exact Cayley + Householder, full O(n))
+- 'jpmhc': JPmHC mixer (iterative finite Cayley component)
+- 'edelta': E∆ mixer (exact Cayley + Householder gate)
 """
 
 import torch

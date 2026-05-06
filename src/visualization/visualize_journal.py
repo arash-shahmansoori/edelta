@@ -601,27 +601,27 @@ def create_figure_4_reflection_aha_moment():
     ax2.set_title('(b) E∆-MHC-Geo: Gate Trajectory (500 samples)', fontweight='bold')
     ax2.legend(loc='upper right')
     
-    # (c) DDL: Accuracy vs β scatter - THE "AHA!" MOMENT
+    # (c) DDL: cosine alignment vs β scatter - THE "AHA!" MOMENT
     ax3 = axes[1, 0]
     sc1 = ax3.scatter(ddl_traj['beta_mean'], ddl_traj['negation_accuracy'],
                      c=ddl_traj['iter'], cmap='plasma', s=60, alpha=0.85, edgecolors='white', linewidths=0.5)
     ax3.axvline(x=2.0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
     ax3.axhline(y=0.95, color='#27AE60', linestyle=':', linewidth=1.5, alpha=0.8)
     ax3.set_xlabel('β Value')
-    ax3.set_ylabel('Negation Accuracy')
-    ax3.set_title('(c) DDL: Accuracy vs β ("Aha!" Moment)', fontweight='bold')
+    ax3.set_ylabel('Negation Cosine Alignment')
+    ax3.set_title('(c) DDL: Alignment vs β ("Aha!" Moment)', fontweight='bold')
     ax3.set_xlim(0.8, 2.15)
     plt.colorbar(sc1, ax=ax3, label='Iteration')
     
-    # (d) E∆-MHC-Geo: Accuracy vs γ scatter - THE "AHA!" MOMENT
+    # (d) E∆-MHC-Geo: cosine alignment vs γ scatter - THE "AHA!" MOMENT
     ax4 = axes[1, 1]
     sc2 = ax4.scatter(hybrid_traj['gate_mean'], hybrid_traj['negation_accuracy'],
                      c=hybrid_traj['iter'], cmap='plasma', s=60, alpha=0.85, edgecolors='white', linewidths=0.5)
     ax4.axvline(x=0.0, color='gray', linestyle='--', linewidth=1.5, alpha=0.7)
     ax4.axhline(y=0.95, color='#27AE60', linestyle=':', linewidth=1.5, alpha=0.8)
     ax4.set_xlabel('Gate Value (γ)')
-    ax4.set_ylabel('Negation Accuracy')
-    ax4.set_title('(d) E∆-MHC-Geo: Accuracy vs γ ("Aha!" Moment)', fontweight='bold')
+    ax4.set_ylabel('Negation Cosine Alignment')
+    ax4.set_title('(d) E∆-MHC-Geo: Alignment vs γ ("Aha!" Moment)', fontweight='bold')
     plt.colorbar(sc2, ax=ax4, label='Iteration')
     
     fig.suptitle('Reflection Experiment: "Aha!" Moment Visualization\n'

@@ -16,8 +16,8 @@ x_out = H_res · x_streams + H_post · (F(avg(H_pre · x_streams)) ⊗ 1_n)
 
 Three variants:
 - **Baseline TRM**: Standard residual connections (no mixer)
-- **TRM + JPmHC**: Iterative Cayley retraction for H_res (SO(n) only)
-- **TRM + E∆**: Exact Cayley + Householder + gate for H_res (full O(n))
+- **TRM + JPmHC**: Iterative finite-Cayley retraction for H_res
+- **TRM + E∆**: Exact Cayley + Householder gate for H_res
 
 ## Files
 

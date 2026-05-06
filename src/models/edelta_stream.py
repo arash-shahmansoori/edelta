@@ -6,12 +6,13 @@ respect the stream decomposition:
 - Fused geometric operator: single Linear projection generates all geometric
   parameters (u, v, β, k, γ), analogous to JPmHC's fused_proj
 - Per-stream F: attention and MLP operate at d_stream width
-- Full O(n) coverage: Cayley rotation + Householder reflection + learned gate
+- Boundary access to both O(n) components: Cayley rotation + Householder
+  reflection + learned gate
 
 The fused projection replaces 5 separate 2-layer MLPs with a single linear
 layer, reducing geo overhead from ~265K to ~7K per module (at n_streams=4).
 All theoretical guarantees (unconditional orthogonality, eigenvalue exclusion,
-O(n) coverage) are preserved — they depend on the algebraic structure
+boundary component access) are preserved — they depend on the algebraic structure
 (A = uv^T - vu^T is skew-symmetric), not on how u, v are computed.
 """
 
@@ -356,7 +357,7 @@ class GPT(nn.Module):
     Key design choices:
     1. Fused geo projection: Linear(n_embd → 3n+2) replaces 5 MLPs
     2. Per-stream F: attention/MLP at d_stream width (like JPmHC)
-    3. Full O(n): Cayley rotation + Householder reflection + learned gate
+    3. Hybrid O(n) component access: Cayley rotation + Householder reflection + learned gate
     4. Exact orthogonality: analytical Cayley solve (not iterative)
     """
 
@@ -388,7 +389,7 @@ class GPT(nn.Module):
         print(f"  n_layer: {config.n_layer}")
         print(f"  Geo operator: fused Linear({config.n_embd} → {3*config.n_streams+2})")
         print(f"  F width: {d_stream} (per-stream)")
-        print(f"  Full O(n): Cayley + Householder + gate")
+        print(f"  Hybrid O(n): Cayley + Householder + gate")
 
     def get_num_params(self, non_embedding=True):
         n_params = sum(p.numel() for p in self.parameters())

@@ -414,7 +414,7 @@ $$\mathbf{Q} = (\mathbf{I} + \mathbf{M})^{-1}(\mathbf{I} - \mathbf{M})$$
 | Expressivity | Low | High | **High** | **Highest** |
 | Best for | Simple rotation | Correction | Geometric | **All tasks** |
 
-**Key takeaway:** E∆-MHC-Geo Hybrid is the only architecture that achieves:
+**Key takeaway:** E∆-MHC-Geo Hybrid is the only evaluated architecture in this study that combines:
 - ✅ Input-adaptive transformation (like DDL)
 - ✅ Unconditional orthogonality (unlike DDL)
 - ✅ Negation capability (unlike pure Cayley)
@@ -1623,17 +1623,17 @@ $$\mathcal{L}_{\text{gate}} = 4\gamma(1-\gamma), \quad \frac{\partial \mathcal{L
 |:---------|:------------:|:-------:|:-------:|:---------:|:---------------------:|
 | Input-adaptive | No | Yes | No | Yes | **Yes** |
 | Orthogonal | Always | β∈{0,2} only | ≈Approx | ≈Approx (s=2) | **Always** |
-| Negation (λ=−1) | Never | Yes (β=2) | No | No (SO(n) only) | **Yes (γ→0)** |
+| Direct λ=−1 branch | Never | Yes (β=2) | No | No finite-Cayley branch | **Yes (γ→0)** |
 | Determinant | +1 | −1 | ≈1 | ≈+1 | **{−1,+1}** |
-| Full O(n) | SO(n) only | Partial | No | SO(n) only | **Complete** |
+| O(n) components | det=+1 Cayley image | Reflection only | No | det=+1 finite Cayley | **Boundary access to both** |
 | Block topology | — | Standard | Parallel | Parallel | **Series pre-transform** |
 | Cayley computation | Exact | — | — | Iterative (α=0.1, s=2) | **Exact (matrix solve)** |
 
-**Table 1.** E∆-MHC-Geo Hybrid achieves all desirable properties: input-adaptive transformation, unconditional orthogonality, negation capability, and complete O(n) coverage via learned gate selection. JPmHC [7] shares the Cayley insight but uses iterative approximation and lacks the reflection branch.
+**Table 1.** E∆-MHC-Geo Hybrid combines input-adaptive transformation, exact Cayley orthogonality, and a direct reflection branch at the gate boundary. JPmHC [7] shares the Cayley insight and has stronger spectral theory, but uses an iterative approximation and lacks the reflection branch.
 
 ### 8.6 Comparison with mHC and JPmHC
 
-| Component | mHC (DeepSeek) | JPmHC (JP Morgan) | E∆-MHC-Geo (Ours) |
+| Component | mHC (DeepSeek) | JPmHC v2 | E∆-MHC-Geo (Ours) |
 |-----------|---------------|-------------------|-------------------|
 | **Residual mixing** | Doubly stoch. (Sinkhorn) | Approx. orth. (iter. Cayley) | **Exact** orth. (Cayley solve) |
 | **Pre/Post mapping** | Learned (sigmoid/2σ) | Per-token dynamic (softmax) | Learned (identity init) |
@@ -1641,8 +1641,8 @@ $$\mathcal{L}_{\text{gate}} = 4\gamma(1-\gamma), \quad \frac{\partial \mathcal{L
 | **Orthogonality** | Approximate | Approximate ($s\!=\!2$) | **Exact** (algebraic) |
 | **Computation** | Iterative (20 Sinkhorn) | Iterative ($s\!=\!2$ fixed-pt) | **Direct** (matrix solve) |
 | **Input-adaptive** | ❌ No | ✅ Yes (per-token) | ✅ **Yes** (per-input) |
-| **Negation** | ❌ No | ❌ No (SO(n) only) | ✅ **Yes** (Hybrid gate) |
-| **O(n) coverage** | ❌ (doubly stoch.) | ❌ (SO(n) subset) | ✅ **Full O(n)** |
+| **Direct reflection branch** | ❌ No | ❌ No | ✅ **Yes** (Hybrid gate) |
+| **O(n) components** | ❌ (doubly stoch.) | det=+1 finite Cayley | boundary access to both |
 
 ---
 
@@ -1862,7 +1862,7 @@ This experiment specifically tests *geometric operators* (Householder reflection
 | Theorem | Prediction | Experimental Result | Status |
 |---------|------------|---------------------|--------|
 | Theorem 7 (Householder orthogonality) | β = 2 required | β → 1.994 | ✓ Validated |
-| Corollary 6.1 (Negation at β=2) | β = 2 gives λ = -1 | 96% negation accuracy | ✓ Validated |
+| Corollary 6.1 (Negation at β=2) | β = 2 gives λ = -1 | 0.96 negation cosine alignment | ✓ Validated |
 | Hybrid selection | γ → 0 for negation | γ → 0.044 | ✓ Validated |
 | Midpoint collapse | γ avoids 0.5 | γ ∈ {0, 1} at convergence | ✓ Validated |
 
@@ -1998,7 +1998,7 @@ We have presented the **E∆-MHC-Geo Transformer**, a novel architecture that ac
 
 > **Insight 2 (Unconditional Orthogonality):** E∆-MHC-Geo's orthogonality holds for ANY $\beta$ value, unlike DDL which requires exactly $\beta = 2$. This means E∆-MHC-Geo is stable throughout training, while DDL has transient instabilities. *Validated: E∆-MHC-Geo loss curves are smoothest; DDL shows oscillations.*
 
-> **Insight 3 (Negation Impossibility):** The Cayley transform (and all SO(n) rotations) fundamentally cannot produce eigenvalue $-1$. This is a mathematical fact, not an implementation limitation. For negation, we MUST use reflection (Householder). *Validated: On negation task, γ converges to 0 (Householder), not 1 (Cayley).*
+> **Insight 3 (Finite-Cayley Endpoint Exclusion):** The finite Cayley transform cannot produce eigenvalue $-1$, even though the broader group SO(n) can contain matrices with $-1$ eigenvalues in some dimensions. For direct negation along a learned direction, the hybrid uses a reflection branch (Householder). *Validated: On the negation diagnostic, γ converges to 0 (Householder), not 1 (Cayley).*
 
 > **Insight 4 (Householder β=2):** The Householder reflection is orthogonal ONLY at $\beta \in \{0, 2\}$. Since $\beta = 0$ gives identity, $\beta = 2$ is the ONLY value achieving both orthogonality AND negation. *Validated: DDL's β converges to 1.994, discovering this constraint via gradient descent.*
 
@@ -2089,7 +2089,7 @@ Based on our comprehensive experimental validation with fair parameter compariso
 
 [6] d'Aliberti, A., & Ribeiro, D. (2025). The Illusion of Insight in Reasoning Models: Understanding Apparent Self-Correction in Large Language Models. *arXiv:2601.00514v1*.
 
-[7] Sengupta, A., Wang, Y., & Brunswic, L. (2026). Hyper-Connections with Cayley Retraction for Scalable Transformers. *arXiv:2602.18308*.
+[7] Sengupta, B., Wang, J., & Brunswic, L. (2026). JPmHC Dynamical Isometry via Orthogonal Hyper-Connections. *arXiv:2602.18308v2* (updated March 4, 2026).
 
 [8] Karpathy, A. (2022). nanoGPT: The simplest, fastest repository for training/finetuning medium-sized GPTs. *GitHub Repository*.
 

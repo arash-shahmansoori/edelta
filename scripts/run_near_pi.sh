@@ -24,10 +24,11 @@ for ds in near_pi_rotation near_pi_rotation_multiplane; do
     if [ ! -f "data/${ds}/train_x.npy" ]; then
         echo "Generating ${ds}..."
         if [ "$ds" = "near_pi_rotation" ]; then
-            uv run src/data/near_pi_rotation.py --rotation_mode single_plane --seed 42
+            uv run src/data/near_pi_rotation.py --rotation_mode single_plane \
+                --theta 3.10 --seed 42
         else
             uv run src/data/near_pi_rotation.py --rotation_mode multi_plane \
-                --output_dir data/near_pi_rotation_multiplane --seed 42
+                --output_dir data/near_pi_rotation_multiplane --theta 3.14 --seed 42
         fi
     fi
 done

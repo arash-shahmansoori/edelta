@@ -9,8 +9,8 @@ Both mixers follow the parallel routing topology from JPmHC (Eq. 14):
     x_out = H_res · x_streams + H_post · (F(avg(H_pre · x_streams)) ⊗ 1_n)
 
 The key difference:
-- JPmHC: H_res via iterative Cayley (SO(n) only, approximate)
-- E∆:    H_res via exact Cayley + Householder gate (full O(n), exact)
+- JPmHC: H_res via iterative Cayley (finite Cayley component, approximate)
+- E∆:    H_res via exact Cayley + Householder gate (boundary access to both O(n) components)
 
 Usage in TRM Block:
     # Replace: hidden = rms_norm(hidden + self.self_attn(hidden))
@@ -26,7 +26,7 @@ class JPmHCMixer(nn.Module):
     """
     JPmHC mixer for TRM integration.
 
-    Faithful to arXiv:2602.18308:
+    Faithful to arXiv:2602.18308v2:
     - Fused projection: LN(x_flat) → [H_pre | H_post | H_res]
     - H_pre: row-stochastic (softmax dim=-1)
     - H_post: column-stochastic (softmax dim=-2)
@@ -97,7 +97,7 @@ class EdeltaMixer(nn.Module):
     """
     E∆ mixer for TRM integration.
 
-    Combines E∆'s full O(n) geometric operator with JPmHC-style routing:
+    Combines E∆'s hybrid geometric operator with JPmHC-style routing:
     - Exact Cayley rotation (analytical solve, not iterative)
     - Householder reflection on full dimension (for negation capability)
     - Learned gate γ for automatic operator selection

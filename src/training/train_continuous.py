@@ -283,7 +283,7 @@ def create_model(args, input_dim: int, block_size: int):
         
     elif args.model_type == 'jpmhc':
         print(f"\n=== JPmHC (Cayley Retraction Baseline) ===")
-        print(f"  Reference: arXiv:2602.18308")
+        print(f"  Reference: arXiv:2602.18308v2 (March 2026)")
         config = JPmHCConfig(
             n_layer=n_layer,
             n_head=args.n_head,

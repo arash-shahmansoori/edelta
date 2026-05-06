@@ -1,7 +1,7 @@
 # Comparative Analysis: E∆-MHC-Geo vs. JPmHC
 
-**Date:** February 2026  
-**Context:** This document provides a precise, cross-referenced comparison between our proposed **E∆-MHC-Geo** architecture and the concurrent work **JPmHC** (Sengupta, Wang & Brunswic, JP Morgan Chase, arXiv:2602.18308, February 2026). Every claim below is verified against the primary sources: our `main.tex` and JPmHC's published paper. This document will serve as the basis for incorporating JPmHC into our Related Work and experimental evaluation.
+**Date:** March 2026
+**Context:** This document provides a precise, cross-referenced comparison between our proposed **E∆-MHC-Geo** architecture and the concurrent work **JPmHC** (Biswa Sengupta, Jinhua Wang & Leo Brunswic, arXiv:2602.18308v2, updated March 4, 2026). Every claim below is intended to be checked against the March v2 arXiv version and our `main.tex`. This document will serve as the basis for incorporating JPmHC into our Related Work and experimental evaluation.
 
 **Note on theorem/equation references:** Our `main.tex` uses section-based numbering for theorems (e.g., Theorem 4.1) and sequential numbering for equations. To avoid ambiguity, this document references theorems by **name and label** (e.g., "the Eigenvalue Exclusion theorem, `thm:exclusion`") rather than compiled numbers.
 
@@ -43,7 +43,7 @@ The geometrically transformed state $X_{geo} = \mathcal{G}_\gamma(X_l)$ is used 
 
 ---
 
-## 2. Topological Completeness: Full O(n) Coverage vs. SO(n) Only
+## 2. Reflection Branch: Boundary Access vs. Finite Cayley Only
 
 ### JPmHC (Restricted to a Subset of SO(n))
 
@@ -53,7 +53,7 @@ Critically, while $SO(n)$ itself can contain matrices with eigenvalue $-1$ (e.g.
 
 *   **Consequence:** JPmHC is geometrically incapable of performing exact negation, mirroring, or belief reversal in the latent space via its residual mixer. Their paper does not discuss or acknowledge this limitation.
 
-### E∆-MHC-Geo (Full O(n) via Hybrid Gate)
+### E∆-MHC-Geo (Cayley + Householder via Hybrid Gate)
 
 Our architecture introduces a learned operator-selection gate $\gamma$ (the Hybrid Operator definition, `def:hybrid` in `main.tex`) that interpolates between a Cayley rotation ($\det = +1$, excludes $\lambda = -1$) and a Householder reflection fixed at $\beta = 2$ ($\det = -1$, provides $\lambda = -1$). This gives the model access to both connected components of the orthogonal group $O(n)$:
 
@@ -160,11 +160,11 @@ Two caveats from JPmHC's own paper bear noting:
 
 ---
 
-## 8. Evaluation Strategy: Adopting the ARC-AGI Benchmark
+## 8. Optional Future Evaluation: ARC-AGI
 
 ### Motivation
 
-While our continuous synthetic benchmarks (Gyroscope, Stability, Reflection, Near-$\pi$) precisely validate individual mathematical theorems, adopting the **ARC-AGI** benchmark—exactly as JPmHC did—will provide direct head-to-head empirical comparison on a complex reasoning task.
+While our continuous synthetic benchmarks (Gyroscope, Stability, Reflection, Near-$\pi$) precisely validate individual mathematical theorems, ARC-AGI could be considered later as a downstream stress test on complex reasoning tasks. It should not be part of the main paper comparison unless a full, matched, multi-seed experiment is completed.
 
 ### Why ARC-AGI is Ideal for Demonstrating Our Advantages
 
@@ -205,4 +205,4 @@ We hypothesize that E∆-MHC-Geo will outperform JPmHC on ARC-AGI for three reas
 2. **Householder reflection** enables the model to represent mirror/negation operations directly in the residual path, which pure Cayley cannot express.
 3. **Series pre-transformation** provides geometrically aligned representations to the Attention mechanism, improving feature extraction on spatial reasoning tasks.
 
-These hypotheses remain to be validated experimentally. The synthetic benchmark results ($6.0\times$ manifold precision, $470\times$ norm preservation, $96\%$ negation accuracy) provide strong theoretical grounding for these predictions, but ARC-AGI performance depends on many additional factors (tokenization quality, training dynamics, optimizer interaction) that require empirical testing.
+These hypotheses remain to be validated experimentally. The synthetic benchmark results provide theoretical grounding for considering this direction, but ARC-AGI performance depends on many additional factors (tokenization quality, training dynamics, optimizer interaction) that require empirical testing. For the current paper, ARC-AGI should be referenced only as a possible future benchmark, not as evidence for the proposed architecture.

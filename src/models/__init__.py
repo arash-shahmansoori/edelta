@@ -5,7 +5,7 @@ This module contains the core model architectures:
 - BaselineGPT: Standard GPT baseline (model.py)
 - DDL: Deep Delta Learning (arXiv:2601.00417)
 - mHC: DeepSeek mHC with Sinkhorn (arXiv:2512.24880)
-- JPmHC: JP Morgan mHC with iterative Cayley (arXiv:2602.18308)
+- JPmHC: Jacobian-spectrum Preserving mHC with iterative Cayley (arXiv:2602.18308v2)
 - EdeltaHybrid: E∆-MHC-Geo Hybrid (proposed model with Cayley + Householder)
 """
 
