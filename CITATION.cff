@@ -1,0 +1,21 @@
+cff-version: 1.2.0
+message: "If you use this repository, its code, experiments, figures, architecture, or research ideas, please cite the repository and the associated paper/preprint."
+title: "E∆-MHC-Geo: Geodesic Manifold-Delta Transformer"
+authors:
+  - family-names: "Shahmansoori"
+    given-names: "Arash"
+    email: "arash.mansoori65@gmail.com"
+year: 2026
+date-released: "2026-05-07"
+url: "https://github.com/arash-shahmansoori/edelta"
+repository-code: "https://github.com/arash-shahmansoori/edelta"
+license: "MIT"
+preferred-citation:
+  type: article
+  title: "The E∆-MHC-Geo Transformer: Adaptive Geodesic Operations with Guaranteed Orthogonality"
+  authors:
+    - family-names: "Shahmansoori"
+      given-names: "Arash"
+      email: "arash.mansoori65@gmail.com"
+  year: 2026
+  url: "https://github.com/arash-shahmansoori/edelta"

@@ -2,6 +2,12 @@
 
 A hybrid geometric transformer architecture with input-adaptive, unconditionally orthogonal Cayley residual connections and a Householder reflection branch for boundary access to both connected components of O(n).
 
+## Original Research and Authorship
+
+This repository contains original research by **Arash Shahmansoori** on E∆-MHC-Geo: adaptive geodesic residual operations with exact Cayley rotations, Householder reflection access, and learned operator selection. The research ideas, architecture, experiments, analysis, and manuscript are authored and maintained by Arash Shahmansoori.
+
+If you use this repository, its code, experiments, figures, architecture, terminology, or research ideas directly or indirectly, or if this work inspires future publications, implementations, benchmarks, or derivative developments, please cite this repository and the associated paper/preprint. See [`AUTHORSHIP.md`](AUTHORSHIP.md) and [`CITATION.cff`](CITATION.cff) for attribution details.
+
 ## Key Results (mean ± std, 3 seeds, ~1.79M params each)
 
 ### Main Performance
@@ -301,6 +307,12 @@ python pretrain.py arch=trm arch.mixer_type=edelta arch.n_streams=4
 - **JPmHC**: [arXiv:2602.18308v2](https://arxiv.org/abs/2602.18308v2) — Biswa Sengupta, Jinhua Wang & Leo Brunswic (updated March 4, 2026)
 - **TRM**: [arXiv:2510.04871](https://arxiv.org/abs/2510.04871) — Jolicoeur-Martineau (2025)
 - **"Illusion of Insight"**: [arXiv:2601.00514](https://arxiv.org/abs/2601.00514)
+
+## Citation and Attribution
+
+Please cite this repository and the associated paper/preprint if you use, adapt, compare against, build on, or are inspired by E∆-MHC-Geo in research, software, benchmarks, reports, or publications. This includes direct code reuse, derivative implementations, conceptual reuse of the Cayley/Householder gated operator, or experimental comparisons based on this repository.
+
+Recommended citation metadata is provided in [`CITATION.cff`](CITATION.cff). Authorship and provenance details are documented in [`AUTHORSHIP.md`](AUTHORSHIP.md).
 
 ## License
 
