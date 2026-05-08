@@ -88,10 +88,6 @@ edelta/
 │   ├── run_matched_params.sh      # All 5 models, matched params
 │   ├── run_near_pi.sh             # Near-π + init robustness
 │   └── run_reflection.sh          # Reflection experiments
-├── paper/
-│   ├── main.tex                   # Paper (TMLR format)
-│   ├── main.pdf                   # Compiled PDF
-│   └── references.bib             # Bibliography
 ├── docs/
 │   ├── RESEARCH.md                # Full theoretical framework
 │   └── JPMHC_COMPARISON.md        # Detailed JPmHC comparison
