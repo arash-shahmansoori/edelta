@@ -21,6 +21,7 @@ data/**/*.npz
 arxiv_2602.18308.pdf
 
 # LaTeX build artifacts
+paper/
 paper/*.aux
 paper/*.bbl
 paper/*.blg
