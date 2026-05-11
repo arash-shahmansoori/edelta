@@ -1,12 +1,16 @@
-# E∆-MHC-Geo: Geodesic Manifold-Delta Transformer
+# E∆-MHC-Geo Transformer: Adaptive Geodesic Operations with Guaranteed Orthogonality
 
-A hybrid geometric transformer architecture with input-adaptive, unconditionally orthogonal Cayley residual connections and a Householder reflection branch for boundary access to both connected components of O(n).
+Research implementation for the E∆-MHC-Geo Transformer, a hybrid geometric transformer architecture with input-adaptive, unconditionally orthogonal Cayley residual connections and a Householder reflection branch for boundary access to both connected components of O(n).
 
 ## Original Research and Authorship
 
 This repository contains original research by **Arash Shahmansoori** on E∆-MHC-Geo: adaptive geodesic residual operations with exact Cayley rotations, Householder reflection access, and learned operator selection. The research ideas, architecture, experiments, analysis, and manuscript are authored and maintained by Arash Shahmansoori.
 
 If you use this repository, its code, experiments, figures, architecture, terminology, or research ideas directly or indirectly, or if this work inspires future publications, implementations, benchmarks, or derivative developments, please cite this repository and the associated paper/preprint. See [`AUTHORSHIP.md`](AUTHORSHIP.md) and [`CITATION.cff`](CITATION.cff) for attribution details.
+
+## Associated Paper
+
+This repository accompanies the arXiv preprint [**The E∆-MHC-Geo Transformer: Adaptive Geodesic Operations with Guaranteed Orthogonality**](https://arxiv.org/abs/2605.06729) by Arash Shahmansoori (2026), arXiv:2605.06729, cs.LG.
 
 ## Key Results (mean ± std, 3 seeds, ~1.79M params each)
 
@@ -27,7 +31,7 @@ E∆ achieves **3.7x improvement** over GPT on gyroscope with **33% fewer layers
 | DDL | 8 | 128 | — | 1.784M | [arXiv:2406.17550](https://arxiv.org/abs/2406.17550) |
 | mHC | 9 | 128 | 32 | 1.838M | [arXiv:2512.24880](https://arxiv.org/abs/2512.24880) |
 | JPmHC | 7 | 512 | 128 | 1.771M | [arXiv:2602.18308v2](https://arxiv.org/abs/2602.18308v2) |
-| **E∆** | **6** | 128 | 32 | **1.788M** | This work |
+| **E∆** | **6** | 128 | 32 | **1.788M** | [arXiv:2605.06729](https://arxiv.org/abs/2605.06729) |
 
 ### Reflection (Negation y = -x)
 
@@ -208,7 +212,7 @@ A head-to-head architectural comparison on the [ARC-AGI](https://arcprize.org/) 
 **Setup:** Same TRM backbone, same data, same optimizer — only the mixer module differs:
 - **Baseline TRM**: Standard residual connections (no mixer)
 - **TRM + JPmHC**: Iterative Cayley retraction, finite Cayley residual mixer ([arXiv:2602.18308v2](https://arxiv.org/abs/2602.18308v2), March 2026)
-- **TRM + E∆**: Exact Cayley + Householder + gate (this work)
+- **TRM + E∆**: Exact Cayley + Householder + gate ([arXiv:2605.06729](https://arxiv.org/abs/2605.06729))
 
 **Metrics tracked:** Exact-match accuracy, Pass@k (k=1,10,100), convergence curves, gradient norms, per-task gate γ analysis.
 
@@ -297,7 +301,7 @@ python pretrain.py arch=trm arch.mixer_type=edelta arch.n_streams=4
 
 ## References
 
-- **E∆-MHC-Geo**: This work
+- **E∆-MHC-Geo**: [arXiv:2605.06729](https://arxiv.org/abs/2605.06729) — Arash Shahmansoori (2026)
 - **DDL**: [arXiv:2406.17550](https://arxiv.org/abs/2406.17550)
 - **mHC**: [arXiv:2512.24880](https://arxiv.org/abs/2512.24880)
 - **JPmHC**: [arXiv:2602.18308v2](https://arxiv.org/abs/2602.18308v2) — Biswa Sengupta, Jinhua Wang & Leo Brunswic (updated March 4, 2026)
@@ -309,6 +313,18 @@ python pretrain.py arch=trm arch.mixer_type=edelta arch.n_streams=4
 Please cite this repository and the associated paper/preprint if you use, adapt, compare against, build on, or are inspired by E∆-MHC-Geo in research, software, benchmarks, reports, or publications. This includes direct code reuse, derivative implementations, conceptual reuse of the Cayley/Householder gated operator, or experimental comparisons based on this repository.
 
 Recommended citation metadata is provided in [`CITATION.cff`](CITATION.cff). Authorship and provenance details are documented in [`AUTHORSHIP.md`](AUTHORSHIP.md).
+
+```bibtex
+@misc{shahmansoori2026edeltamhcgeotransformeradaptivegeodesic,
+      title={The E$\Delta$-MHC-Geo Transformer: Adaptive Geodesic Operations with Guaranteed Orthogonality}, 
+      author={Arash Shahmansoori},
+      year={2026},
+      eprint={2605.06729},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2605.06729}, 
+}
+```
 
 ## License
 
